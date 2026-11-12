@@ -107,6 +107,41 @@ def cmd_make(args):
     print("  3) 成片联系表：", project_dir / "检查记录")
 
 
+def cmd_llm(args):
+    """LLM 草稿三件套：释文草稿 / 多音字预标注 / 文案草稿。输出一律 draft，待人工确认。"""
+    from core import llm
+    data_root = Path(args.data_root)
+    prof_dir = data_root / "作品档案" / args.slug
+    if args.what == "transcribe":
+        if args.export:
+            pkg = llm.export_transcription_package(prof_dir)
+            print(f"已导出 llm包（逐列裁图 + prompt）→ {pkg}\n把回复存为 {prof_dir}/释文草稿回复.txt 后："
+                  f"python -m core.orchestrate llm transcribe --slug {args.slug} --import")
+            return
+        if args.import_reply:
+            reply = Path(args.import_reply).read_text(encoding="utf-8")
+            d = llm.import_transcription_draft(prof_dir, reply, provider="export")
+        else:
+            d = llm.draft_transcription(prof_dir)
+        print(f"释文草稿（draft，待确认）：来源={d.get('source_text')} 低置信字={'、'.join(d['low_confidence_chars']) or '无'}")
+        print(f"→ {prof_dir}/释文草稿.txt（确认后覆盖 释文.txt 并重建档案）")
+    elif args.what == "pron":
+        text = (prof_dir / "释文.txt").read_text(encoding="utf-8")
+        flags = llm.annotate_pronunciation(text)
+        prof = json.loads((prof_dir / "档案.json").read_text(encoding="utf-8"))
+        new = {k: v for k, v in flags.items() if k not in prof.get("pronunciation", {})}
+        (prof_dir / "读音草稿.json").write_text(json.dumps(new, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"多音字预标注（draft）：{len(flags)} 个多音字，其中 {len(new)} 个待定夺 → {prof_dir}/读音草稿.json")
+        for k, v in flags.items():
+            mark = "（已确认）" if k in prof.get("pronunciation", {}) else ""
+            print(f"  {k}: {'/'.join(v['readings'])} {mark}")
+    elif args.what == "copy":
+        prof = json.loads((prof_dir / "档案.json").read_text(encoding="utf-8"))
+        prof["_dir"] = prof_dir
+        out = llm.draft_copy(prof)
+        print(f"文案草稿 → {out}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="calligraphy-studio 编排器")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -123,9 +158,17 @@ def main():
     m.add_argument("--skip-tts", action="store_true")
     m.add_argument("--rebuild-profile", action="store_true")
     m.add_argument("--col-counts", help="人工指定各列字数（右→左逗号分隔），覆盖自动估计")
+    l = sub.add_parser("llm", help="LLM 草稿：transcribe（释文）/ pron（多音字）/ copy（文案）")
+    l.add_argument("what", choices=["transcribe", "pron", "copy"])
+    l.add_argument("--slug", required=True)
+    l.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
+    l.add_argument("--export", action="store_true", help="transcribe：导出逐列裁图+prompt（无 API key 模式）")
+    l.add_argument("--import-reply", dest="import_reply", help="transcribe：导入外部 LLM 回复文件")
     a = ap.parse_args()
     if a.cmd == "make":
         cmd_make(a)
+    elif a.cmd == "llm":
+        cmd_llm(a)
 
 
 if __name__ == "__main__":
