@@ -1,0 +1,68 @@
+{
+  "artwork": "/workspace/书法展示样片-进阶三种/素材/后赤壁赋_原图.jpg",
+  "geometry": {
+    "auto_deskew": true
+  },
+  "geometry_prep": {
+    "scale": 2.0,
+    "inset_px": 6
+  },
+  "cleaned": "./作品_clean_校正.png",
+  "title": "《后赤壁赋》节选",
+  "title_sub": "笔顺复现 · 行草",
+  "subtitle": "行草",
+  "author": "郭德贤 · 书",
+  "author_note": "",
+  "seal_char": "郭",
+  "columns_text": [
+    "于是携酒与",
+    "鱼复游于赤",
+    "壁之下江流",
+    "有声断岸",
+    "千尺山高月",
+    "小水落石出",
+    "曾日月之几"
+  ],
+  "has_signature": true,
+  "layout": "auto",
+  "char_cuts": {
+    "4": [
+      0.215,
+      0.605,
+      0.795
+    ],
+    "7": [
+      0.258,
+      0.395,
+      0.632,
+      0.745,
+      0.862
+    ]
+  },
+  "tag_text": "笔顺为示意",
+  "fps": 30,
+  "paper_height_px": 1180,
+  "stage_top_px": 150,
+  "caption_y_px": 1430,
+  "end_paper_width_px": 1000,
+  "end_paper_top_px": 330,
+  "timing": {
+    "title_seconds": 2.6,
+    "lead_in": 0.7,
+    "writing_seconds": 21.0,
+    "zoom_out_seconds": 2.2,
+    "end_card_seconds": 4.5,
+    "column_gap": 0.45,
+    "char_gap": 0.06,
+    "edge_softness": 0.07
+  },
+  "music": {
+    "seed": 21,
+    "root": 146.83,
+    "bpm": 54,
+    "density": 0.45,
+    "xiao": 0.7,
+    "brush_db": -9.0
+  },
+  "loudness_lufs": -16
+}

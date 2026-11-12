@@ -132,6 +132,20 @@ def build_profile(source: Path, text: str | None, slug: str, data_root: Path = D
     return prof_dir
 
 
+def layout_px_pixels(profile: dict) -> dict:
+    """inkseg 归一化布局 → 章法解析/节奏卡点使用的像素坐标格式（校正后图像坐标系）。"""
+    W, H = profile["geometry"]["size"]
+    cols = []
+    for c in profile["layout"]["columns"]:
+        cols.append({
+            "index": c["index"], "text": c.get("text", ""),
+            "box": [round(v * s) for v, s in zip(c["box"], (W, H, W, H))],
+            "chars": [{"text": ch.get("text", ""),
+                       "box": [round(v * s) for v, s in zip(ch["box"], (W, H, W, H))]} for ch in c["chars"]],
+        })
+    return {"crop": profile["geometry"]["paper_rect"], "columns": cols}
+
+
 def load_profile(slug: str, data_root: Path = DEFAULT_DATA_ROOT, expect_sha: str | None = None) -> dict:
     p = Path(data_root) / "作品档案" / slug / "档案.json"
     if not p.exists():

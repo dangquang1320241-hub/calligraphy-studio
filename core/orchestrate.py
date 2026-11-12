@@ -70,8 +70,16 @@ def cmd_make(args):
     if args.params:
         params.update(json.loads(Path(args.params).read_text(encoding="utf-8")))
     report = plugin.build_config(prof, project_dir, params)
-    extra = f" / {report['n_columns']} 列" if report.get("n_columns") else ""
-    print(f"config 生成：{report['config']}（{report['n_sentences']} 段{extra}，"
+    bits = []
+    if report.get("n_sentences"):
+        bits.append(f"{report['n_sentences']} 段")
+    if report.get("n_columns"):
+        bits.append(f"{report['n_columns']} 列")
+    if report.get("n_chars"):
+        bits.append(f"{report['n_chars']} 组字对")
+    if report.get("n_shots"):
+        bits.append(f"{report['n_shots']} 镜")
+    print(f"config 生成：{report['config']}（{' / '.join(bits) or 'ok'}，"
           f"预计 {report.get('durations_estimate', '?')}）"
           + (f"；{report['note']}" if report.get("note") else ""))
 
@@ -88,9 +96,12 @@ def cmd_make(args):
     subprocess.run(cmd, check=True)
 
     from core import qc
-    align = qc.audio_align(project_dir)
-    bad = [r for r in align if r["对位"] != "✓"]
-    print(f"音画对位：{len(align) - len(bad)}/{len(align)} ✓" + (f"，存疑 {bad}" if bad else ""))
+    if (project_dir / "素材" / "mix.wav").exists() and (project_dir / "timeline.csv").exists():
+        align = qc.audio_align(project_dir)
+        bad = [r for r in align if r["对位"] != "✓"]
+        print(f"音画对位：{len(align) - len(bad)}/{len(align)} ✓" + (f"，存疑 {bad}" if bad else ""))
+    else:
+        print("音画对位：跳过（该风格无人声时间线，如 底乐类风格）")
 
     # 发布索引
     mp4s = sorted((project_dir / "成片").glob("*.mp4"))

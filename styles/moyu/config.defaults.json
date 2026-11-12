@@ -1,0 +1,43 @@
+{
+  "artwork": "/workspace/书法展示样片-进阶三种/素材/后赤壁赋_原图.jpg",
+  "geometry": {
+    "auto_deskew": true
+  },
+  "geometry_prep": {
+    "scale": 2.0,
+    "inset_px": 6
+  },
+  "cleaned": "./作品_clean_校正.png",
+  "cleaned_scale": 2.0,
+  "title": "《后赤壁赋》节选",
+  "subtitle": "行草",
+  "opening_line": "墨落纸上，自有呼吸",
+  "author": "郭德贤 · 书",
+  "author_note": "",
+  "seal_char": "郭",
+  "fps": 30,
+  "focus_points": "auto",
+  "n_shots": 5,
+  "min_magnification": 2.6,
+  "max_magnification": 3.2,
+  "sharpen": 0.55,
+  "end_paper_top_px": 330,
+  "timing": {
+    "shot_seconds": 5.8,
+    "crossfade": 1.4,
+    "end_card_seconds": 5.0,
+    "opening_text_seconds": 3.8,
+    "breath_period": 6.4
+  },
+  "audio": {
+    "seed": 47,
+    "root": 146.83,
+    "bpm": 44,
+    "density": 0.22,
+    "xiao": 0.35,
+    "rain_intensity": 0.6,
+    "rain_db": -7.0,
+    "rustle_db": -13.0
+  },
+  "loudness_lufs": -17
+}
