@@ -67,9 +67,13 @@ def cmd_make(args):
     prof = ensure_profile(args)
     project_dir = Path(args.data_root) / "项目" / f"{args.slug}_{args.style}"
     params = {k: v for k, v in dict(title=args.title, author=args.author, title_sub=args.title_sub).items() if v}
+    if args.params:
+        params.update(json.loads(Path(args.params).read_text(encoding="utf-8")))
     report = plugin.build_config(prof, project_dir, params)
-    print(f"config 生成：{report['config']}（{report['n_sentences']} 句 / {report['n_columns']} 列，"
-          f"预计 {report['durations_estimate']}）")
+    extra = f" / {report['n_columns']} 列" if report.get("n_columns") else ""
+    print(f"config 生成：{report['config']}（{report['n_sentences']} 段{extra}，"
+          f"预计 {report.get('durations_estimate', '?')}）"
+          + (f"；{report['note']}" if report.get("note") else ""))
 
     sdir = Path(plugin.__file__).parent
     renderer = sdir / "render_langdu.py"
@@ -158,6 +162,7 @@ def main():
     m.add_argument("--skip-tts", action="store_true")
     m.add_argument("--rebuild-profile", action="store_true")
     m.add_argument("--col-counts", help="人工指定各列字数（右→左逗号分隔），覆盖自动估计")
+    m.add_argument("--params", help="风格参数 JSON 文件（sentences/scene/char/evolution 等）")
     l = sub.add_parser("llm", help="LLM 草稿：transcribe（释文）/ pron（多音字）/ copy（文案）")
     l.add_argument("what", choices=["transcribe", "pron", "copy"])
     l.add_argument("--slug", required=True)
