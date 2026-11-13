@@ -46,8 +46,7 @@ def ensure_profile(args) -> dict:
         prof["_dir"] = prof_json.parent
         return prof
     text = Path(args.text).read_text(encoding="utf-8") if args.text else None
-    if text is None and prof_json.exists() is False:
-        raise SystemExit("新档案需要 --text 释文.txt")
+    # 无释文新档案允许（版式级风格 / ③屏补释文）；需释文风格已在 cmd_make 按 NEEDS_TEXT 拦截
     print(f"构建作品档案 → {data_root / '作品档案' / args.slug}")
     counts = [int(v) for v in args.col_counts.split(",")] if args.col_counts else None
     prof_dir = build_profile(Path(args.source), text, args.slug, data_root, col_counts=counts)
@@ -99,10 +98,11 @@ def cmd_make(args):
     subprocess.run(cmd, check=True)
 
     # 通用 ffprobe 兜底 QC + 联系表（渲染器没自带时）
-    mp4s = sorted((project_dir / "成片").glob("*.mp4")) if (project_dir / "成片").exists() else []
+    mp4s = sorted((project_dir / "成片").glob("*.mp4"), key=lambda p: p.stat().st_mtime) \
+        if (project_dir / "成片").exists() else []
     if mp4s:
         from core import qc
-        rep = qc.ffprobe_check(mp4s[-1])
+        rep = qc.ffprobe_check(mp4s[-1])  # 最新_mtime：历史上残留的旧半成品不干扰
         chk = project_dir / "检查记录"
         chk.mkdir(exist_ok=True)
         (chk / "编排ffprobe.json").write_text(
@@ -121,7 +121,7 @@ def cmd_make(args):
         print("音画对位：跳过（该风格无人声时间线，如 底乐类风格）")
 
     # 发布索引
-    mp4s = sorted((project_dir / "成片").glob("*.mp4"))
+    mp4s = sorted((project_dir / "成片").glob("*.mp4"), key=lambda p: p.stat().st_mtime)
     if mp4s:
         mp4 = mp4s[-1]
         idx = Path(args.data_root) / "发布索引.csv"
@@ -180,7 +180,7 @@ def main():
     m = sub.add_parser("make", help="出片：档案 → config → 渲染 → QC")
     m.add_argument("style")
     m.add_argument("source", help="作品原图（或已建档案时的任一等价文件）")
-    m.add_argument("--text", help="释文 txt（新档案必填）")
+    m.add_argument("--text", help="释文 txt（需释文风格的新档案必填；无释文可先建档案后③补）")
     m.add_argument("--slug", required=True, help="作品标识（档案目录名）")
     m.add_argument("--title", help="片头标题（默认 《slug》）")
     m.add_argument("--title-sub", dest="title_sub", help="副标题（默认 行草）")

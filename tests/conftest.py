@@ -11,6 +11,7 @@ sys.path.insert(0, str(REPO))
 # webapp 的数据根在 import 时读取：测试统一用临时目录，绝不触碰真实档案
 _WEB_ROOT = Path(tempfile.mkdtemp(prefix="cs_web_test_"))
 os.environ["CALLIGRAPHY_DATA_ROOT"] = str(_WEB_ROOT)
+os.environ["CALLIGRAPHY_JOBS_DIR"] = str(_WEB_ROOT / "jobs")  # 任务记录同样落临时目录
 
 from core.profile import build_profile  # noqa: E402
 

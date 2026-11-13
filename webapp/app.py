@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 from core.llm import annotate_pronunciation  # noqa: E402
-from core.profile import DEFAULT_DATA_ROOT, strip_punct  # noqa: E402
+from core.profile import DEFAULT_DATA_ROOT, safe_slug, strip_punct  # noqa: E402
 from webapp import jobs  # noqa: E402
 
 # 数据根可用环境变量覆盖（测试隔离用），默认真实数据目录
@@ -41,8 +41,12 @@ def prof_dir(slug: str) -> Path:
     return d
 
 
+# 档案目录名安全化与 core/profile 共用一份实现（防路径逃逸；空名/纯点拒绝）
 def _safe(s: str) -> str:
-    return "".join(ch for ch in s if ch not in '/\\:*?"<>|').strip()
+    try:
+        return safe_slug(s)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 def load(slug: str) -> dict:
@@ -84,7 +88,9 @@ def _ensure_crops(slug: str) -> dict:
 def _assert_slug_free(slug: str):
     """同作品同时只允许一个后台任务（防确认/重建竞态覆盖）。"""
     for j in jobs.recent(50):
-        if j["status"] == "running" and slug in j["label"]:
+        if j["status"] != "running":
+            continue
+        if j.get("slug") == slug or (j.get("slug") is None and slug in j["label"]):
             raise HTTPException(409, f"该作品已有任务在跑（{j['label']}），请等它完成再操作")
 
 
@@ -111,20 +117,28 @@ async def api_create(slug: str = Form(...), text: str = Form(""), image: UploadF
     _assert_slug_free(slug)
     up = DATA / "_uploads"
     up.mkdir(exist_ok=True)
-    src = up / f"{slug}.jpg"
-    src.write_bytes(await image.read())
+    data = await image.read()
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(413, "图片超过 50MB，请压缩后上传")
+    ct = (image.content_type or "").lower()
+    name = (image.filename or "").lower()
+    if not (ct.startswith("image/") or name.endswith((".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"))):
+        raise HTTPException(415, f"仅支持图片（jpg/png/webp/heic），收到 {image.content_type or name or '未知类型'}")
+    src = up / f"{slug}.jpg"  # HEIC 归一在 core.profile 注册 opener，扩展名不影响解码
+    src.write_bytes(data)
     cmd = [str(VENV_PY), "-m", "core.profile", str(src), "--slug", slug]
     if text.strip():
         t = up / f"{slug}_释文.txt"
         t.write_text(text.strip() + "\n", encoding="utf-8")
         cmd += ["--text", str(t)]
-    jid = jobs.start(f"构建档案 {slug}", cmd)
+    jid = jobs.start(f"构建档案 {slug}", cmd, slug=slug)
     return {"job": jid, "slug": slug}
 
 
 # ─────────────────────────────── ② 列框确认
 @app.get("/api/profiles/{slug}")
 def api_profile(slug: str):
+    slug = _safe(slug)
     prof = load(slug)
     prof_dir_ = prof_dir(slug)
     counts = [len(c["chars"]) for c in prof["layout"]["columns"]]
@@ -143,6 +157,7 @@ def api_profile(slug: str):
 
 @app.post("/api/profiles/{slug}/rebuild")
 def api_rebuild(slug: str, body: dict):
+    slug = _safe(slug)
     _assert_slug_free(slug)
     d = prof_dir(slug)
     prof = load(slug)
@@ -157,13 +172,14 @@ def api_rebuild(slug: str, body: dict):
         cmd += ["--col-counts", ",".join(str(v) for v in body["col_counts"])]
     if body.get("signature"):
         cmd += ["--signature"]
-    jid = jobs.start(f"重建档案 {slug}", cmd)
+    jid = jobs.start(f"重建档案 {slug}", cmd, slug=slug)
     return {"job": jid}
 
 
 # ─────────────────────────────── ③ 释文确认
 @app.get("/api/profiles/{slug}/pron")
 def api_pron(slug: str):
+    slug = _safe(slug)
     prof = load(slug)
     confirmed = prof.get("pronunciation", {})
     text = prof["transcription"].get("text", "")
@@ -176,6 +192,7 @@ def api_pron(slug: str):
 @app.post("/api/profiles/{slug}/confirm")
 def api_confirm(slug: str, body: dict):
     """确认释文 + 读音：写入档案（confidence=human-confirmed），按逐列文本（权威）或全文+列字数重建字框。"""
+    slug = _safe(slug)
     text = body.get("text", "").strip()
     per_column = [c for c in (body.get("per_column") or []) if strip_punct(c)]
     if not text and not per_column:
@@ -194,15 +211,19 @@ def api_confirm(slug: str, body: dict):
     counts = body.get("col_counts") or []
     if counts and not per_column:
         cmd += ["--col-counts", ",".join(str(v) for v in counts)]
-    jid = jobs.start(f"确认释文 {slug}", cmd)
+    jid = jobs.start(f"确认释文 {slug}", cmd, slug=slug)
 
     def patch():
         import time
         while True:
             j = jobs.get(jid)
-            if j and j["status"] != "running":
+            if j is None or j["status"] != "running":
                 break
             time.sleep(1)
+        if not j or j["status"] != "done":
+            # 重建失败时档案未变，仍盖 human-confirmed 会让释文与字框失配——只在成功后写
+            print(f"[confirm] 任务未成功（{j['status'] if j else '任务记录丢失'}），不写入确认状态")
+            return
         d = DATA / "作品档案" / slug / "档案.json"
         prof = json.loads(d.read_text(encoding="utf-8"))
         prof["transcription"]["text"] = text
@@ -241,7 +262,7 @@ def api_make(body: dict):
     if body.get("params"):
         pfile.write_text(json.dumps(body["params"], ensure_ascii=False), encoding="utf-8")
         cmd += ["--params", str(pfile)]
-    jid = jobs.start(f"出片 {slug} · {style}", cmd)
+    jid = jobs.start(f"出片 {slug} · {style}", cmd, slug=slug)
     return {"job": jid}
 
 

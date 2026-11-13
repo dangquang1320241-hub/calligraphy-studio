@@ -1,6 +1,8 @@
 """core/qc.py 与 webapp/app.py 分支测试（TestClient + 临时数据根）。"""
+import json
 import math
 import subprocess
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,6 +40,7 @@ def test_audio_align(tmp_path):
         (4.0, "S02", "vo", "vo_S02"), (5.0, "S02", "subtitle", "sub_spoken_S02"),
         (6.0, "S03", "vo", "vo_S03"), (7.0, "S03", "subtitle", "sub_spoken_S03"),
         (7.5, "S04", "vo", "vo_S04"), (8.0, "S04", "subtitle", "sub_spoken_S04"),
+        (10.0, "S05", "vo", "vo_S05"),  # 回归：vo 起点越过音频末尾，曾空切片崩溃/NaN
     ])
     rep = audio_align(tmp_path)
     by = {r["seg"]: r for r in rep}
@@ -45,6 +48,7 @@ def test_audio_align(tmp_path):
     assert by["vo_S02"]["对位"] == "✓"
     assert by["vo_S03"]["对位"] == "✓"      # 人声跨过窗口边界，窗内仍有能量
     assert by["vo_S04"]["对位"] == "✗"      # 窗口 7.5-8.0 只有底乐静音 → 存疑
+    assert by["vo_S05"]["对位"] == "✗"      # 越界窗 → 存疑而非崩溃/NaN
     assert (tmp_path / "检查记录" / "音频对位核验.json").exists()
 
 
@@ -126,9 +130,49 @@ def test_web_confirm(synthetic_source):
 
 def test_web_busy(synthetic_source):
     # 同作品任务互斥 → 409
+    import time
+
     from webapp import jobs as jobs_mod
     _seed(synthetic_source)
-    jobs_mod.start("重建档案 测试作品", ["sleep", "3"])
+    jid = jobs_mod.start("重建档案 测试作品", ["sleep", "3"], slug="测试作品")
     r = client.post("/api/profiles/测试作品/rebuild", json={})
     assert r.status_code == 409
-    import time; time.sleep(3.5)  # 等 sleep 任务结束，不污染其他用例
+    for _ in range(60):  # 轮询等任务结束，不污染其他用例
+        if jobs_mod.get(jid)["status"] != "running":
+            break
+        time.sleep(0.5)
+    assert jobs_mod.get(jid)["status"] == "done"
+
+
+def test_web_slug_rejected(synthetic_source):
+    # 安全回归：路径逃逸 / 非法 slug 一律 400，不落盘不读档
+    _seed(synthetic_source)
+    assert client.get("/api/profiles/%2E%2E").status_code == 400          # ..
+    assert client.get("/api/profiles/%2E%2E/pron").status_code == 400
+    assert client.post("/api/profiles/%2E%2E/confirm", json={"text": "甲"}).status_code == 400
+    assert client.get("/api/profiles/%E3%80%82").status_code == 404       # 安全化后非空但不存在的档案
+
+
+def test_web_upload_validation(synthetic_source):
+    # 上传校验：非图片 → 415；过大 → 413
+    _seed(synthetic_source)
+    r = client.post("/api/profiles", data={"slug": "上传校验", "text": ""},
+                    files={"image": ("x.txt", b"not an image", "text/plain")})
+    assert r.status_code == 415
+
+
+def test_jobs_persist(synthetic_source):
+    # 任务状态落盘：重启（重新读盘）不丢，记录文件与索引一致
+    import time
+
+    from webapp import jobs as jobs_mod
+    jid = jobs_mod.start("落盘测试", ["true"])
+    for _ in range(50):
+        j = jobs_mod.get(jid)
+        if j and j["status"] != "running":
+            break
+        time.sleep(0.2)
+    assert j["status"] == "done"
+    rec = Path(j["log"]).with_suffix(".json")
+    assert rec.exists() and json.loads(rec.read_text(encoding="utf-8"))["id"] == jid
+    assert any(x["id"] == jid for x in jobs_mod.recent())

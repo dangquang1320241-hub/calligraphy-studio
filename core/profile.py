@@ -14,6 +14,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
+from pillow_heif import register_heif_opener  # noqa: E402
+
+register_heif_opener()  # 微信/iPhone 传图常见 HEIC（D0 决策：入口归一；无论扩展名叫什么都能解码）
+
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "common"))
@@ -29,6 +33,14 @@ SCHEMA_VERSION = "0.1.0"
 
 def strip_punct(s: str) -> str:
     return "".join(ch for ch in s if ch not in PUNCT)
+
+
+def safe_slug(s: str) -> str:
+    """档案目录名安全化：去路径分隔符与非法字符；空名或纯点（.. 可逃出档案根）拒绝。"""
+    out = "".join(ch for ch in s if ch not in '/\\:*?"<>|').strip()
+    if not out or out in {".", ".."}:
+        raise ValueError(f"作品标识非法：{s!r}")
+    return out
 
 
 def split_clauses(text: str):
@@ -69,7 +81,7 @@ def _distribute(text: str, counts: list):
         raise ValueError(
             f"释文字数（{len(chars)}，不含标点）与画面检出字数（{total}）不一致。\n"
             f"各列检出字数：{counts}（右→左，共 {len(counts)} 列）。\n"
-            f"请核对释文是否与作品一致、是否漏了落款外的字，或用 --n-cols 指定列数。")
+            f"请核对释文是否与作品一致、是否漏了落款外的字，或用 --col-counts 指定各列字数。")
     out, i = [], 0
     for n in counts:
         out.append(chars[i:i + n])
@@ -81,6 +93,7 @@ def build_profile(source: Path, text: str | None, slug: str, data_root: Path = D
                   signature: bool = False, pronunciation: dict | None = None,
                   col_counts: list | None = None, per_column: list | None = None) -> Path:
     source = Path(source).resolve()
+    slug = safe_slug(slug)
     prof_dir = Path(data_root) / "作品档案" / slug
     prof_dir.mkdir(parents=True, exist_ok=True)
 
@@ -160,6 +173,7 @@ def layout_px_pixels(profile: dict) -> dict:
 
 
 def load_profile(slug: str, data_root: Path = DEFAULT_DATA_ROOT, expect_sha: str | None = None) -> dict:
+    slug = safe_slug(slug)
     p = Path(data_root) / "作品档案" / slug / "档案.json"
     if not p.exists():
         raise FileNotFoundError(f"作品档案不存在：{p}")

@@ -52,7 +52,8 @@ def audio_align(project_dir: Path) -> list:
     win = int(0.05 * SR)
     n = len(y) // win
     env = np.sqrt((y[:n * win].reshape(n, win) ** 2).mean(1))
-    rows = list(csv.DictReader(open(project_dir / "timeline.csv", encoding="utf-8")))
+    with open(project_dir / "timeline.csv", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
     vo = [(float(r["t_sec"]), r["id"]) for r in rows if r["kind"] == "vo"]
     ends = {r["id"].replace("sub_spoken", "vo"): float(r["t_sec"])
             for r in rows if r["kind"] == "subtitle" and r["id"].startswith("sub_spoken")}
@@ -60,9 +61,9 @@ def audio_align(project_dir: Path) -> list:
     for t, seg in vo:
         end = ends.get(seg, t + 3)
         a, b = int(t / 0.05), int(end / 0.05)
-        inner = float(env[a:b].max()) if b > a else 0.0
-        pre = float(env[max(0, a - 5):a].mean()) if a > 0 else 0.0
-        post = float(env[b:b + 5].mean())
+        inner = float(env[a:b].max()) if b > a and a < len(env) else 0.0
+        pre = float(env[max(0, a - 5):a].mean()) if 0 < a <= len(env) else 0.0  # 前窗同理不越界
+        post = float(env[b:b + 5].mean()) if b < len(env) else 0.0  # 窗越界（音频末尾）不产生 NaN
         ok = inner > 0.02 and inner > 3 * max(pre, post, 1e-4)
         report.append({"seg": seg, "window": [t, end], "峰值RMS": round(inner, 3),
                        "窗外均RMS": round(max(pre, post), 4), "对位": "✓" if ok else "✗"})
