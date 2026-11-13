@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -253,7 +252,6 @@ def synth_ambience(duration, plucks, fs=FS, seed=SEED, fade_in=0.9, fade_out=1.6
 
 def write_wav(path: Path, audio: np.ndarray, fs: int = FS):
     import wave
-    import struct
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

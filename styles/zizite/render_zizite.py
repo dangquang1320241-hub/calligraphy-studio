@@ -31,7 +31,6 @@ from media import (  # noqa: E402
     STAGE_TOP,
     apply_vignette,
     as_norm,
-    blurred_work,
     composite_work,
     crop_and_resize,
     ease_in_out,

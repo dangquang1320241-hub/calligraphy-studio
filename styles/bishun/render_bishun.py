@@ -26,9 +26,9 @@ sys.path.insert(0, str(COMMON))
 
 import inkseg  # noqa: E402
 from ambient import brush_swish, fade_edges, master, place  # noqa: E402
-from cards import compose_end_card, compose_title_card  # noqa: E402
+from cards import compose_end_card  # noqa: E402
 from encode import render_frames_to_mp4  # noqa: E402
-from media import (BG, CREAM, GOLD, MUTED, make_background, make_paper_texture,  # noqa: E402
+from media import (CREAM, make_background, make_paper_texture,  # noqa: E402
                    preprocess_artwork, resolve_path, sample_paper_color, load_config)
 from music_synth import synth  # noqa: E402
 from render_util import blit, blit_center, parallel_frames, tag_pill, text_rgba, verify  # noqa: E402

@@ -6,7 +6,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
-from core.profile import strip_punct  # noqa: E402
 from core import stylekit  # noqa: E402
 
 NAME = "慢揭幕"

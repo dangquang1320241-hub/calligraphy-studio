@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
-from core.profile import PUNCT, split_clauses, strip_punct  # noqa: E402
+from core.profile import split_clauses, strip_punct  # noqa: E402
 
 NAME = "朗读版"
 NEEDS_TEXT = True

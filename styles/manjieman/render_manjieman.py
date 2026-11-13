@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
@@ -22,10 +22,6 @@ sys.path.insert(0, str(COMMON))
 from audio import render_music  # noqa: E402
 from cards import compose_end_card, compose_title_card  # noqa: E402
 from encode import (  # noqa: E402
-    contact_sheet,
-    decode_test,
-    extract_frames,
-    ffprobe_check,
     render_frames_to_mp4,
 )
 from media import (  # noqa: E402
@@ -33,8 +29,6 @@ from media import (  # noqa: E402
     CAPTION_TOP,
     CREAM,
     GOLD,
-    MUTED,
-    SAFE_BOTTOM,
     STAGE_BOT,
     STAGE_TOP,
     as_norm,
@@ -48,14 +42,12 @@ from media import (  # noqa: E402
     frame_to_rgb_bytes,
     hold_fade,
     ink_wipe_mask,
-    lerp,
     load_config,
     load_rgb,
     make_background,
     make_paper_texture,
     make_vignette,
     mix_reveal,
-    pad_rect_to_aspect,
     paste_centered,
     preprocess_artwork,
     resolve_path,

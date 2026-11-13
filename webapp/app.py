@@ -13,7 +13,7 @@ import urllib.parse
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 REPO = Path(__file__).resolve().parent.parent
@@ -140,7 +140,6 @@ async def api_create(slug: str = Form(...), text: str = Form(""), image: UploadF
 def api_profile(slug: str):
     slug = _safe(slug)
     prof = load(slug)
-    prof_dir_ = prof_dir(slug)
     counts = [len(c["chars"]) for c in prof["layout"]["columns"]]
     return {
         "slug": slug,

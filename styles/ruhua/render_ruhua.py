@@ -31,7 +31,7 @@ import inkseg  # noqa: E402
 from ambient import master  # noqa: E402
 from cards import compose_end_card  # noqa: E402
 from encode import render_frames_to_mp4  # noqa: E402
-from media import INK, font as nfont, load_config, preprocess_artwork, resolve_path, text_image  # noqa: E402
+from media import font as nfont, load_config, preprocess_artwork, resolve_path, text_image  # noqa: E402
 from music_synth import synth  # noqa: E402
 from render_util import blit, blit_center, parallel_frames, tag_pill, text_rgba, verify  # noqa: E402
 

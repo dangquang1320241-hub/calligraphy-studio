@@ -15,7 +15,6 @@ import os
 import urllib.request
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
 
 REPO = Path(__file__).resolve().parent.parent
@@ -116,7 +115,6 @@ def import_transcription_draft(prof_dir: Path, reply_text: str, provider: str = 
 def draft_transcription(prof_dir: Path, provider: LLMProvider | None = None) -> dict:
     """API 模式：直接调视觉模型出释文草稿。"""
     prof_dir = Path(prof_dir)
-    prof = json.loads((prof_dir / "档案.json").read_text(encoding="utf-8"))
     prov = provider or get_provider()
     reply = prov.chat(TRANSCRIBE_PROMPT, [prof_dir / "作品_校正.png"])
     return import_transcription_draft(prof_dir, reply, provider=prov.name)
@@ -127,7 +125,7 @@ def annotate_pronunciation(text: str) -> dict:
     """多音字预标注（本地 pypinyin，无需网络）：列出多音字与候选读音，人工/LLM 定夺。
     只产出草稿；已确认的 pronunciation 不受影响。"""
     from pypinyin import pinyin, Style
-    from core.profile import PUNCT, strip_punct
+    from core.profile import strip_punct
     out = {}
     for ch in dict.fromkeys(strip_punct(text)):
         r = pinyin(ch, style=Style.TONE, heteronym=True)[0]
@@ -146,7 +144,7 @@ def draft_copy(profile: dict, project_dir: Path | None = None) -> Path:
     src = profile["transcription"].get("draft", {}).get("source_text") if isinstance(
         profile["transcription"].get("draft"), dict) else None
     lines.append(f"- 作品：《{slug}》" + (f"（{src}）" if src else ""))
-    lines.append(f"- 书体：见列框确认图；署名见作品落款\n")
+    lines.append("- 书体：见列框确认图；署名见作品落款\n")
     lines.append("## 建议文案\n")
     lines.append(f"新作一件，书{src or slug}。慢下来，听一笔一画。\n")
     lines.append("## 核查项\n- 出处与释文是否经作者确认（确认点 2）\n- 点评类措辞是否客观\n")

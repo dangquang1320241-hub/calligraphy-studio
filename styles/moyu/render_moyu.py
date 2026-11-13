@@ -19,7 +19,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent  # calligraphy-studio 根目录

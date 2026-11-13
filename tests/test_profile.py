@@ -1,6 +1,5 @@
 """core/profile.py 分支测试。"""
 import json
-from pathlib import Path
 
 import pytest
 
@@ -105,7 +104,6 @@ def test_layout_px_pixels(built_profile):
 
 
 def test_load_profile_errors(built_profile):
-    from core.profile import load_profile
     root = built_profile.parent.parent
     assert load_profile("测试作品", root)["slug"] == "测试作品"
     with pytest.raises(FileNotFoundError):

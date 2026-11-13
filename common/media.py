@@ -6,7 +6,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 _FONT_DIR = Path(__file__).resolve().parent / "fonts"
 _NOTO = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"  # Debian 共享电脑原约定

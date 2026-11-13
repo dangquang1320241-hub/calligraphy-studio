@@ -4,7 +4,7 @@
 流程：图像裁切调色 → edge-tts 逐句合成（取字边界）→ 生成统一 timeline.csv → 合成底乐并闪避混音 →
       逐帧纯函数渲染（镜头停在每句对应区域）→ ffmpeg 编码 → ffprobe 校验 + 关键帧联系表。
 """
-import argparse, asyncio, json, subprocess, sys, csv, shutil, datetime, os
+import argparse, json, subprocess, sys, csv, shutil, datetime
 from pathlib import Path
 import numpy as np
 import cv2
@@ -105,7 +105,7 @@ def write_timeline_csv(tl, path, fps):
     for s in tl['sents']:
         seg = f"S{s['i'] + 1:02d}"
         rows.append((s['start'] - 0.9, seg, 'visual', f'cam_move_{seg}', f"镜头移向区域 {s['region']}"))
-        rows.append((s['clip_start'], seg, 'vo', f'vo_{seg}', f"TTS 句音频起点（含前导静音）"))
+        rows.append((s['clip_start'], seg, 'vo', f'vo_{seg}', "TTS 句音频起点（含前导静音）"))
         rows.append((s['start'], seg, 'subtitle', f'sub_in_{seg}', s['subtitle']))
         rows.append((s['end'], seg, 'subtitle', f'sub_spoken_{seg}', '本句朗读结束'))
     rows.append((tl['last_end'], 'S99', 'visual', 'pull_back', '拉回全幅'))
@@ -251,7 +251,6 @@ class Renderer:
         pad = 26
         feather = 70.0
         xs = np.arange(self.W, dtype=np.float32)
-        ys = np.arange(self.H, dtype=np.float32)
         # 当前区域在帧内的实际宽度（随镜头插值）
         st = self.camera(t)
         s = np.exp(st[2])

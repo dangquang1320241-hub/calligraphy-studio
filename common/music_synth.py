@@ -26,7 +26,6 @@ def _pluck(f0, dur, sr, glide_to=None, glide_t=0.35, bright=1.0):
     t = np.arange(n) / sr
     f = np.full(n, f0, dtype=np.float64)
     if glide_to:
-        g0 = int(glide_t * sr)
         ramp = np.clip((t - glide_t) / 0.25, 0, 1)
         ramp = ramp * ramp * (3 - 2 * ramp)
         f = f0 * (glide_to / f0) ** ramp

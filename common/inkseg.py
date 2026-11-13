@@ -235,7 +235,6 @@ def detect_layout(rgb: np.ndarray, columns_text=None, n_cols=None, signature=Fal
         rp = _smooth(rowsum, max(2.0, sw * 0.8))
         if not k:
             k = _estimate_count(_smooth(rowsum, (x1 - x0) * 0.25), min_gap=(x1 - x0) * 0.6)
-        ch = (y1 - y0) / k
         if (c + 1) in char_cuts:
             ycuts = sorted(int(v * H) if v <= 1 else int(v) for v in char_cuts[c + 1])
             k = len(ycuts) + 1
@@ -275,9 +274,7 @@ def char_label_map(binary: np.ndarray, layout: dict) -> np.ndarray:
     H, W = binary.shape
     n, lab, st, cen = cv2.connectedComponentsWithStats(binary.astype(np.uint8), 8)
     out = np.full((H, W), -1, np.int32)
-    LW, LH = layout["image_size"]
-    sx, sy = W / LW, H / LH
-    # 重新按当前分辨率归列（布局可能在别的分辨率上检测）
+    # layout 框为归一化坐标，直接乘当前分辨率（旧"按 image_size 换算"方案已废弃）
     col_x = []
     for col in layout["columns"]:
         col_x.append(((col["box"][0] + col["box"][2]) / 2) * W)

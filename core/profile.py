@@ -4,9 +4,7 @@
 用法（一般经 core.orchestrate 调用；也可独立运行）：
   python -m core.profile <作品图> --text 释文.txt --slug 三槐堂铭节选 [--data-root …] [--signature]
 """
-import hashlib
 import json
-import re
 import sys
 from datetime import datetime
 from pathlib import Path

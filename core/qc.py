@@ -15,7 +15,6 @@ def sheet_for(mp4: Path, out_dir: Path, n: int = 6, title: str = "") -> Path:
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
     from videokit import contact_sheet, grab_frames  # noqa: E402
-    import json as _json
     dur = float(ffprobe_check(mp4)["duration"] or 0)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

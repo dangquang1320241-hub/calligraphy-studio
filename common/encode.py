@@ -167,7 +167,6 @@ def extract_frames(path: Path, times, out_dir: Path, prefix="frame"):
 
 
 def contact_sheet(frame_paths, out_path: Path, cols=4, thumb_w=270, labels=None, font_path=None):
-    from PIL import Image, ImageDraw, ImageFont
 
     frames = [Image.open(p).convert("RGB") for p in frame_paths]
     if not frames:

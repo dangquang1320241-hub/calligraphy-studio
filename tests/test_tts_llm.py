@@ -5,7 +5,6 @@ import pytest
 
 from core import tts as tts_mod
 from core.llm import annotate_pronunciation, import_transcription_draft
-from core.profile import strip_punct
 
 
 def test_provider_instance():
@@ -59,7 +58,6 @@ def test_annotate_pronunciation():
 
 
 def test_import_draft(profile_factory):
-    import json
     root = profile_factory(slug="草稿案例")
     prof_dir = root / "作品档案" / "草稿案例"
     reply = '前言…… {"来源": "测试篇", "columns": ["甲乙丙", "丁戊己"], "置信度低的字": ["丙"]} 后记'

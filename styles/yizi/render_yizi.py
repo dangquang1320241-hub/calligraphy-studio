@@ -76,7 +76,6 @@ class Yizi:
         key = self.show_for(t); prev = self.show_for(t - 0.5)
         for k, a in ([(prev, 1.0)] if prev == key else [(prev, 1 - vk.ease(self._since_switch(t))), (key, vk.ease(self._since_switch(t)))]):
             im, lab = self.stage_img(k)
-            push = 1 + 0.03 * ((t % 6) / 6)
             h, w = im.shape[:2]
             x = int(S['center_x'] - w / 2); y = int(S['center_y'] - h / 2)
             L.Renderer.comp(fr, im, x, y, a)
