@@ -93,18 +93,20 @@ def build_profile(source: Path, text: str | None, slug: str, data_root: Path = D
     img, geo_info = _deskew(work, prof_dir)
     paper_rect = geo_info.get("paper_rect")
 
-    # 3) 释文 → 列分配（两遍检测：先估列数/字数，再按原文切字；col_counts 人工覆盖）
+    # 3) 释文 → 列分配（有释文：先估列字数再按原文切字；无释文：纯自动估列，供②看框、③补文）
     rgb = np.asarray(img.convert("RGB"))
-    lay_auto = inkseg.detect_layout(rgb) if (text and not col_counts) else None
     if text:
-        counts = col_counts or [len(c["chars"]) for c in lay_auto["columns"]]
+        counts = col_counts
+        if not counts:
+            lay_auto = inkseg.detect_layout(rgb)
+            counts = [len(c["chars"]) for c in lay_auto["columns"]]
         per_col = _distribute(text, counts)
         layout = inkseg.detect_layout(rgb, columns_text=per_col, signature=signature)
         # 组件过少时列可能被丢弃，保证与分配一致
         if sum(len(c["chars"]) for c in layout["columns"]) != len(strip_punct(text)):
             raise ValueError("列检测与释文分配不一致，请查看列框确认图后用 char_cuts 人工修正。")
     else:
-        layout = lay_auto
+        layout = inkseg.detect_layout(rgb)  # 无释文也出列框（字数估计可能不准，②里人工校）
         per_col = []
 
     # 4) 产物：确认图 / layout / 档案
