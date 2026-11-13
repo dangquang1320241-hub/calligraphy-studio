@@ -95,7 +95,7 @@
       </div>
     </div>
     <button class="min" onclick="rebuild()">按上面的字数重建档案</button>
-    <span class="muted">（重建后字框/裁图会更新）</span>
+    <span class="muted">（重建后字框/裁图会更新；释文未填的档案会用占位切字，释文在③填写确认）</span>
     <pre id="job2" class="log hide"></pre>
   </div>
   <button class="go" onclick="goto(3)">下一步：释文确认 →</button>
@@ -259,6 +259,7 @@ async function loadConfirm() {
 }
 async function confirmText() {
   const counts = [...$('#cntBox').querySelectorAll('input')].map(i => +i.value);
+  const perCol = [...$('#colTexts').querySelectorAll('input')].map(i => i.value.trim());
   const pron = {};
   $$('#pronTable .pron-tts').forEach(inp => {
     const ch = inp.dataset.ch, v = inp.value.trim();
@@ -266,7 +267,7 @@ async function confirmText() {
   });
   const {job} = await api('/api/profiles/' + encodeURIComponent(SLUG) + '/confirm',
     {method:'POST', headers:{'Content-Type':'application/json'},
-     body: JSON.stringify({text: $('#fullText').value, pronunciation: pron, col_counts: counts})});
+     body: JSON.stringify({text: $('#fullText').value, per_column: perCol, pronunciation: pron, col_counts: counts})});
   pollJob(job, '#job3', j => { if (j.status === 'done') { $('#confirmDone').classList.remove('hide'); loadLib(); } });
 }
 

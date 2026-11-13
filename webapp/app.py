@@ -126,11 +126,12 @@ def api_rebuild(slug: str, body: dict):
     d = prof_dir(slug)
     prof = load(slug)
     src = d / "作品原图.jpg"
-    text = body.get("text", prof["transcription"].get("text", ""))
-    t = d / "释文.txt"
-    t.write_text(text.strip() + "\n", encoding="utf-8")
-    cmd = [str(VENV_PY), "-m", "core.profile", str(src), "--text", str(t), "--slug", slug,
-           "--data-root", str(DATA)]
+    text = body.get("text", prof["transcription"].get("text", "")).strip()
+    cmd = [str(VENV_PY), "-m", "core.profile", str(src), "--slug", slug, "--data-root", str(DATA)]
+    if text:  # 有释文才走文字分配；无释文重建=按列字数占位切字（释文在③填写）
+        t = d / "释文.txt"
+        t.write_text(text + "\n", encoding="utf-8")
+        cmd += ["--text", str(t)]
     if body.get("col_counts"):
         cmd += ["--col-counts", ",".join(str(v) for v in body["col_counts"])]
     if body.get("signature"):
@@ -153,15 +154,23 @@ def api_pron(slug: str):
 
 @app.post("/api/profiles/{slug}/confirm")
 def api_confirm(slug: str, body: dict):
-    """确认释文 + 读音：写入档案（confidence=human-confirmed），并按确认文本+列字数重建字框。"""
+    """确认释文 + 读音：写入档案（confidence=human-confirmed），按逐列文本（权威）或全文+列字数重建字框。"""
     text = body.get("text", "").strip()
-    if not text:
+    per_column = [c for c in (body.get("per_column") or []) if strip_punct(c)]
+    if not text and not per_column:
         raise HTTPException(400, "释文为空")
     pron = {k: v for k, v in (body.get("pronunciation") or {}).items() if v.get("pinyin") or v.get("tts_char")}
-    counts = body.get("col_counts") or []
     cmd = [str(VENV_PY), "-m", "core.profile", str(prof_dir(slug) / "作品原图.jpg"),
            "--slug", slug, "--data-root", str(DATA)]
-    if counts:
+    if per_column:
+        cmd += ["--columns-text", "|".join(per_column)]
+        text = text or "".join(per_column)
+    if text:
+        t = prof_dir(slug) / "释文.txt"
+        t.write_text(text + "\n", encoding="utf-8")
+        cmd += ["--text", str(t)]
+    counts = body.get("col_counts") or []
+    if counts and not per_column:
         cmd += ["--col-counts", ",".join(str(v) for v in counts)]
     jid = jobs.start(f"确认释文 {slug}", cmd)
 

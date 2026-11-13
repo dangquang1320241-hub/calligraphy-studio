@@ -79,7 +79,7 @@ def _distribute(text: str, counts: list):
 
 def build_profile(source: Path, text: str | None, slug: str, data_root: Path = DEFAULT_DATA_ROOT,
                   signature: bool = False, pronunciation: dict | None = None,
-                  col_counts: list | None = None) -> Path:
+                  col_counts: list | None = None, per_column: list | None = None) -> Path:
     source = Path(source).resolve()
     prof_dir = Path(data_root) / "作品档案" / slug
     prof_dir.mkdir(parents=True, exist_ok=True)
@@ -93,17 +93,27 @@ def build_profile(source: Path, text: str | None, slug: str, data_root: Path = D
     img, geo_info = _deskew(work, prof_dir)
     paper_rect = geo_info.get("paper_rect")
 
-    # 3) 释文 → 列分配（有释文：先估列字数再按原文切字；无释文：纯自动估列，供②看框、③补文）
+    # 3) 释文 → 列切字（优先级：逐列文本 > 释文全文字数分配 > 无释文占位切字/纯自动）
     rgb = np.asarray(img.convert("RGB"))
-    if text:
+    if per_column:  # ③ 屏逐列确认：最权威，直接按列切字
+        per_col = [strip_punct(c) for c in per_column]
+        text = text or "".join(per_col)
+    elif text:
         counts = col_counts
         if not counts:
             lay_auto = inkseg.detect_layout(rgb)
             counts = [len(c["chars"]) for c in lay_auto["columns"]]
         per_col = _distribute(text, counts)
-        layout = inkseg.detect_layout(rgb, columns_text=per_col, signature=signature)
-        # 组件过少时列可能被丢弃，保证与分配一致
-        if sum(len(c["chars"]) for c in layout["columns"]) != len(strip_punct(text)):
+    elif col_counts:  # 无释文 + 人工列字数：占位切字（只修字框，释文待③）
+        n_last = col_counts[-1] - 1 if signature else col_counts[-1]
+        per_col = ["□" * n for n in col_counts[:-1]] + (["□" * n_last] if col_counts else [])
+    else:
+        per_col = None  # 纯自动估列估字
+    if per_col is not None:
+        # 逐列文本已含落款，不再让 inkseg 追加；签名语义只在「全文分配」分支生效
+        layout = inkseg.detect_layout(rgb, columns_text=per_col,
+                                      signature=signature if (text and not per_column) else False)
+        if text and sum(len(c["chars"]) for c in layout["columns"]) != len(strip_punct(text)):
             raise ValueError("列检测与释文分配不一致，请查看列框确认图后用 char_cuts 人工修正。")
     else:
         layout = inkseg.detect_layout(rgb)  # 无释文也出列框（字数估计可能不准，②里人工校）
@@ -167,8 +177,11 @@ if __name__ == "__main__":
     ap.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     ap.add_argument("--signature", action="store_true")
     ap.add_argument("--col-counts", help="人工指定各列字数（右→左，逗号分隔），列字数估错时用")
+    ap.add_argument("--columns-text", help='逐列权威文本（右→左，竖线|分隔，不含标点），最可靠的切字方式')
     a = ap.parse_args()
     text = Path(a.text).read_text(encoding="utf-8") if a.text else None
     counts = [int(v) for v in a.col_counts.split(",")] if a.col_counts else None
-    d = build_profile(Path(a.source), text, a.slug, Path(a.data_root), a.signature, col_counts=counts)
+    per_column = a.columns_text.split("|") if a.columns_text else None
+    d = build_profile(Path(a.source), text, a.slug, Path(a.data_root), a.signature,
+                      col_counts=counts, per_column=per_column)
     print("档案目录：", d)
