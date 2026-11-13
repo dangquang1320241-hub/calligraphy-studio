@@ -5,6 +5,7 @@
 家人局域网使用：--host 0.0.0.0 后访问 http://<Mac的IP>:8800
 """
 import json
+import os
 import shutil
 import sys
 import threading
@@ -21,7 +22,9 @@ from core.llm import annotate_pronunciation  # noqa: E402
 from core.profile import DEFAULT_DATA_ROOT, strip_punct  # noqa: E402
 from webapp import jobs  # noqa: E402
 
-DATA = DEFAULT_DATA_ROOT
+# 数据根可用环境变量覆盖（测试隔离用），默认真实数据目录
+DATA = Path(os.environ.get("CALLIGRAPHY_DATA_ROOT", str(DEFAULT_DATA_ROOT)))
+DATA.mkdir(parents=True, exist_ok=True)
 VENV_PY = REPO / ".venv" / "bin" / "python"
 if not VENV_PY.exists():  # 允许系统 python 运行 webapp、venv 只跑渲染
     VENV_PY = Path(sys.executable)

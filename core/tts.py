@@ -49,7 +49,7 @@ class EdgeTTSProvider(TTSProvider):
                 print(f"TTS 重试 {attempt + 1}/3：{e}")
 
 
-PROVIDERS = {p.name: p for p in (EdgeTTSProvider,)}
+PROVIDERS = {"edge": EdgeTTSProvider()}  # 注册实例（曾存类导致少绑 self 的回归已修）
 
 
 def cache_key(text: str, voice: str, rate: str, pitch: str, volume: str, provider: str) -> str:

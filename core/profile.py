@@ -102,7 +102,7 @@ def build_profile(source: Path, text: str | None, slug: str, data_root: Path = D
         counts = col_counts
         if not counts:
             lay_auto = inkseg.detect_layout(rgb)
-            counts = [len(c["chars"]) for c in lay_auto["columns"]]
+            counts = [len(c["chars"]) for c in lay_auto["columns"]]  # 墨迹块自然含落款字，无需 +1
         per_col = _distribute(text, counts)
     elif col_counts:  # 无释文 + 人工列字数：占位切字（只修字框，释文待③）
         n_last = col_counts[-1] - 1 if signature else col_counts[-1]
@@ -110,9 +110,10 @@ def build_profile(source: Path, text: str | None, slug: str, data_root: Path = D
     else:
         per_col = None  # 纯自动估列估字
     if per_col is not None:
-        # 逐列文本已含落款，不再让 inkseg 追加；签名语义只在「全文分配」分支生效
+        # 文本（全文/逐列）里已含落款字，inkseg 不应再追加"款"框——signature 仅在
+        # 无文本占位切字时用于给末列多开一个切位
         layout = inkseg.detect_layout(rgb, columns_text=per_col,
-                                      signature=signature if (text and not per_column) else False)
+                                      signature=bool(signature) and not text and not per_column)
         if text and sum(len(c["chars"]) for c in layout["columns"]) != len(strip_punct(text)):
             raise ValueError("列检测与释文分配不一致，请查看列框确认图后用 char_cuts 人工修正。")
     else:
