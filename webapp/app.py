@@ -47,26 +47,42 @@ def load(slug: str) -> dict:
 
 
 def _ensure_crops(slug: str) -> dict:
-    """生成 ASCII 文件名的列裁图 + 确认图副本（URL 编码友好）。返回 {overlay, crops:[…]}。"""
+    """列裁图 + 确认图副本（ASCII 文件名）。布局变化（档案更新）时自动重新生成。"""
+    import hashlib
     d = prof_dir(slug)
+    prof = load(slug)
     crops_dir = d / "列裁图"
-    if not crops_dir.exists():
+    layout_hash = hashlib.sha1(json.dumps(prof["layout"]["columns"], ensure_ascii=False).encode()).hexdigest()[:10]
+    marker = crops_dir / ".layout_hash"
+    if crops_dir.exists() and marker.exists() and marker.read_text(encoding="utf-8") == layout_hash:
+        pass  # 布局没变，复用
+    else:
         from PIL import Image
-        prof = load(slug)
         im = Image.open(d / "作品_校正.png").convert("RGB")
         W, H = im.size
         crops_dir.mkdir(exist_ok=True)
+        for old in crops_dir.glob("col*.jpg"):
+            old.unlink()
         for c in prof["layout"]["columns"]:
             x0, y0, x1, y1 = [int(v * s) for v, s in zip(c["box"], (W, H, W, H))]
             crop = im.crop((max(0, x0 - 20), max(0, y0 - 20), min(W, x1 + 20), min(H, y1 + 20)))
             crop = crop.resize((crop.width * 2, crop.height * 2))
             crop.save(crops_dir / f"col{c['index'] + 1:02d}.jpg", quality=90)
+        marker.write_text(layout_hash, encoding="utf-8")
     overlay = d / "preview_overlay.jpg"
-    if not overlay.exists():
-        shutil.copy(d / "列框确认图.jpg", overlay)
+    src_overlay = d / "列框确认图.jpg"
+    if not overlay.exists() or src_overlay.stat().st_mtime > overlay.stat().st_mtime:
+        shutil.copy(src_overlay, overlay)
     return {"overlay": f"/data/作品档案/{urllib.parse.quote(_safe(slug))}/preview_overlay.jpg",
             "crops_dir": f"/data/作品档案/{urllib.parse.quote(_safe(slug))}/列裁图",
             "n_crops": len(list(crops_dir.glob('col*.jpg')))}
+
+
+def _assert_slug_free(slug: str):
+    """同作品同时只允许一个后台任务（防确认/重建竞态覆盖）。"""
+    for j in jobs.recent(50):
+        if j["status"] == "running" and slug in j["label"]:
+            raise HTTPException(409, f"该作品已有任务在跑（{j['label']}），请等它完成再操作")
 
 
 def _style_registry() -> dict:
@@ -89,6 +105,7 @@ async def api_create(slug: str = Form(...), text: str = Form(""), image: UploadF
     slug = _safe(slug)
     if not slug:
         raise HTTPException(400, "作品标识不能为空")
+    _assert_slug_free(slug)
     up = DATA / "_uploads"
     up.mkdir(exist_ok=True)
     src = up / f"{slug}.jpg"
@@ -123,6 +140,7 @@ def api_profile(slug: str):
 
 @app.post("/api/profiles/{slug}/rebuild")
 def api_rebuild(slug: str, body: dict):
+    _assert_slug_free(slug)
     d = prof_dir(slug)
     prof = load(slug)
     src = d / "作品原图.jpg"
@@ -159,6 +177,7 @@ def api_confirm(slug: str, body: dict):
     per_column = [c for c in (body.get("per_column") or []) if strip_punct(c)]
     if not text and not per_column:
         raise HTTPException(400, "释文为空")
+    _assert_slug_free(slug)
     pron = {k: v for k, v in (body.get("pronunciation") or {}).items() if v.get("pinyin") or v.get("tts_char")}
     cmd = [str(VENV_PY), "-m", "core.profile", str(prof_dir(slug) / "作品原图.jpg"),
            "--slug", slug, "--data-root", str(DATA)]
@@ -202,6 +221,7 @@ def api_styles():
 def api_make(body: dict):
     slug = _safe(body.get("slug", ""))
     style = body.get("style", "")
+    _assert_slug_free(slug)
     prof = load(slug)  # 校验档案存在
     src = prof["source"]["file"]  # 用档案记录的原始图（sha256 校验基于它）
     cmd = [str(VENV_PY), "-m", "core.orchestrate", "make", style, str(src),
