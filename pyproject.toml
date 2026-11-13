@@ -1,0 +1,28 @@
+[project]
+name = "calligraphy-studio"
+version = "0.1.0"
+description = "书法作品 → 竖屏短视频的自动化工具（档案层 + 12 风格插件 + Web 四屏）"
+requires-python = ">=3.12"
+dependencies = [
+    "edge-tts==7.3.1",
+    "fastapi==0.162.6",
+    "librosa==1.0.0",
+    "numpy==2.5.4",
+    "opencv-python-headless==5.0.0.93",
+    "pillow==13.0.0",
+    "pillow-heif==1.8.1",
+    "pypinyin==0.55.0",
+    "python-multipart==0.0.33",
+    "scipy==1.18.1",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27",
+    "pytest==9.2.0",
+    "pytest-cov==7.1.0",
+]
+
+[tool.uv]
+package = false  # 虚拟项目：不构建安装自身，靠 REPO 内 sys.path 导入

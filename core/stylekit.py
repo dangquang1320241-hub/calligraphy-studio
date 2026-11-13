@@ -49,13 +49,25 @@ def passage_lines(text: str) -> list:
 
 
 def render_cmd_b(style_dir: str, renderer_filename: str):
-    """B 族渲染器 CLI 工厂：--config --out（必填 --out 直出文件，无 --preview/--skip-tts）。"""
+    """B 族渲染器 CLI 工厂：--config --out；--preview/--skip-tts 仅当渲染器声明时透传。
+    渲染器间 --preview 语义有差异（bool 预览开关 vs int 帧数），以各自 argparse 为准。"""
+    import re
+
     def _cmd(cfg_path, project_dir, preview=None, skip_tts=False):
         cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
         name = cfg.get("output_name", "out")
         W, H = cfg.get("width", 1080), cfg.get("height", 1920)
         out = Path(project_dir) / "成片" / f"{name}_{W}x{H}.mp4"
         out.parent.mkdir(parents=True, exist_ok=True)
-        return [sys.executable, str(Path(REPO) / "styles" / style_dir / renderer_filename),
-                "--config", str(cfg_path), "--out", str(out)]
+        cmd = [sys.executable, str(Path(REPO) / "styles" / style_dir / renderer_filename),
+               "--config", str(cfg_path), "--out", str(out)]
+        src = (Path(REPO) / "styles" / style_dir / renderer_filename).read_text(encoding="utf-8")
+        if preview and '"--preview"' in src:
+            if re.search(r'"--preview"\s*,\s*action\s*=\s*"store_true"', src):
+                cmd.append("--preview")  # bool 预览开关
+            else:
+                cmd += ["--preview", str(preview)]
+        if skip_tts and '"--skip-tts"' in src:
+            cmd.append("--skip-tts")
+        return cmd
     return _cmd

@@ -90,7 +90,8 @@ def cmd_make(args):
         if not renderer.exists():
             renderer = sorted(sdir.glob("render*.py"))[0]
         cmd = [sys.executable, str(renderer), "--config", str(report["config"])]
-        if args.skip_tts:
+        if args.skip_tts and '"--skip-tts"' in renderer.read_text(encoding="utf-8"):
+            # 部分渲染器（章法解析/节奏卡点/临帖对比/书写路径）未声明 --skip-tts，传了会 argparse 崩溃
             cmd.append("--skip-tts")
         if args.preview:
             cmd += ["--preview", str(args.preview)]

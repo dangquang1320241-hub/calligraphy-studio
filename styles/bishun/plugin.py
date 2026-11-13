@@ -22,14 +22,9 @@ def build_config(profile: dict, project_dir: Path, params: dict | None = None) -
     if not per_col:
         raise ValueError("笔顺复现需要逐列释文（columns_text 用于字序对位）")
     cfg = dict(_DEFAULTS)
-    corners = profile["geometry"]["info"].get("corners_src")
+    cfg.update(stylekit.common_artwork_fields(profile, project_dir, prof_dir))  # B 族公共字段统一走 stylekit
     cfg.update({
         "output_name": params.get("output_name") or f"{profile['slug']}_{NAME}",
-        "artwork": str((project_dir / "素材" / "作品原图.jpg").resolve()),
-        "geometry": {"perspective": corners} if corners else {"auto_deskew": True},
-        "geometry_prep": params.get("geometry_prep", {"scale": 2.0, "inset_px": 6}),
-        "cleaned": str((project_dir / "素材" / "作品_clean_校正.png").resolve()),
-        "cleaned_scale": 2.0,
         "title": params.get("title", f"《{profile['slug']}》"),
         "title_sub": params.get("title_sub", "行草"),
         "author": params.get("author", "作者名"),
@@ -41,6 +36,8 @@ def build_config(profile: dict, project_dir: Path, params: dict | None = None) -
         "layout": "auto",
         "tag_text": params.get("tag_text", "笔顺为示意"),
     })
+    if "geometry_prep" in params:
+        cfg["geometry_prep"] = params["geometry_prep"]
     for k in ("stage_top_px", "paper_height_px", "caption_y_px", "end_paper_width_px",
               "end_paper_top_px", "timing", "music", "loudness_lufs", "fps"):
         if k in params:

@@ -161,6 +161,28 @@ def test_web_upload_validation(synthetic_source):
     assert r.status_code == 415
 
 
+def test_grab_frames_out_of_range(tmp_path):
+    # 回归：-ss 越过视频末尾时 ffmpeg 0 退出且不出文件，曾把不存在路径传给下游
+    from common.videokit import grab_frames
+    mp4 = tmp_path / "t.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+                    "-i", "color=c=black:s=64x64:d=1", "-t", "1", str(mp4)], check=True)
+    with pytest.raises(RuntimeError, match="取帧失败"):
+        grab_frames(mp4, [99.0], tmp_path / "kf")
+
+
+def test_encode_smoke(tmp_path):
+    # 回归：stderr 改临时文件后基本编码完好（原 PIPE 用法在长渲染时有管道互锁死锁隐患）
+    import numpy as np
+    from scipy.io import wavfile
+
+    from common.encode import render_frames_to_mp4
+    wavfile.write(tmp_path / "a.wav", 48000, np.zeros(48000, np.int16))
+    frames = (np.full((64, 64, 3), 128, np.uint8) for _ in range(10))
+    out = render_frames_to_mp4(frames, 10, 10, 64, 64, tmp_path / "a.wav", tmp_path / "out.mp4")
+    assert out.exists() and out.stat().st_size > 0
+
+
 def test_jobs_persist(synthetic_source):
     # 任务状态落盘：重启（重新读盘）不丢，记录文件与索引一致
     import time

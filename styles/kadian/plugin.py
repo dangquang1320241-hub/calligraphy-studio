@@ -59,7 +59,7 @@ def build_config(profile: dict, project_dir: Path, params: dict | None = None) -
         "music": {**DEFAULTS["music"], **params.get("music", {})},
         "loudness": params.get("loudness", DEFAULTS["loudness"]),
         "layout": {**DEFAULTS["layout"], **params.get("layout", {})},
-        "_note": "layout_px 指向作品档案 layout.json（inkseg 归一化坐标）；shots 可用 {'col':n} 或 {'char':'n:k','pad':40}",
+        "_note": "layout_px 为像素坐标（layout_px_pixels 生成），落盘于本 config 同目录 layout_px.json；shots 可用 {'col':n} 或 {'char':'n:k','pad':40}",
     }
     (project_dir / "源码").mkdir(parents=True, exist_ok=True)
     (project_dir / "素材").mkdir(exist_ok=True)

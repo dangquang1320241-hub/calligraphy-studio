@@ -292,6 +292,8 @@ def char_label_map(binary: np.ndarray, layout: dict) -> np.ndarray:
             if int(np.argmin(dists)) == ci:
                 ids.append(cid)
         m = np.isin(lab, ids)
+        if not col["chars"]:
+            continue  # 外部传入的 layout 可能含空列（无检出字），跳过标号
         ycuts = [ch["box"][1] * H for ch in col["chars"]] + [col["chars"][-1]["box"][3] * H]
         yy = np.arange(H)[:, None]
         for j in range(len(col["chars"])):

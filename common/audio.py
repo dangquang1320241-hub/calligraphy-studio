@@ -228,6 +228,9 @@ def synth_ambience(duration, plucks, fs=FS, seed=SEED, fade_in=0.9, fade_out=1.6
         start = int(round(t0 * fs))
         opts = dict(pluck_opts or {})
         wave = karplus_pluck(freq, dur, fs=fs, amp=amp, seed=seed + i * 13, **opts)
+        if start < 0:  # 提前发声：截掉零点前波形（负起点切片会按 Python 语义回卷崩坏）
+            wave = wave[min(-start, len(wave)):]
+            start = 0
         end = min(n, start + len(wave))
         acc[start:end] += wave[: end - start]
 

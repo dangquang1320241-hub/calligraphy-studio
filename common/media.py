@@ -12,7 +12,8 @@ _FONT_DIR = Path(__file__).resolve().parent / "fonts"
 _NOTO = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"  # Debian 共享电脑原约定
 if Path(_NOTO).exists():
     FONT_REG = _NOTO
-    FONT_BOLD = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
+    _bold = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
+    FONT_BOLD = _bold if Path(_bold).exists() else str(_FONT_DIR / "LXGWWenKai-Regular.ttf")
     FONT_INDEX_SC = 2
 else:  # macOS 等：回落到随库分发的霞鹜文楷（SIL OFL）
     FONT_REG = str(_FONT_DIR / "LXGWWenKai-Regular.ttf")
@@ -361,20 +362,6 @@ def make_seal(char: str = "书", size: int = 168, angle: float = -5.0, seed: int
     return im
 
 
-def drop_shadow(dst: Image.Image, box, radius=22, offset=(0, 10), opacity=0.35) -> Image.Image:
-    x, y, w, h = [int(v) for v in box]
-    if w <= 0 or h <= 0:
-        return dst
-    if dst.mode != "RGBA":
-        dst = dst.convert("RGBA")
-    shadow = Image.new("RGBA", dst.size, (0, 0, 0, 0))
-    layer = Image.new("L", (w, h), 255)
-    shadow.paste(Image.new("RGBA", (w, h), (0, 0, 0, int(255 * opacity))), (x + offset[0], y + offset[1]))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=radius))
-    return Image.alpha_composite(shadow, dst) if False else Image.alpha_composite(dst.convert("RGBA"), shadow)
-    # The above composites shadow ON TOP, which is wrong. Fixed below in paste_work.
-
-
 def composite_work(bg: Image.Image, work: Image.Image, x, y, shadow=True) -> Image.Image:
     dst = bg.convert("RGBA")
     x, y = int(round(x)), int(round(y))
@@ -523,8 +510,8 @@ def resolve_path(cfg: dict, value, default=None) -> Path | None:
     p = Path(value)
     if p.is_absolute() and p.exists():
         return p
-    # try relative to config, then cwd, then project
-    for root in (cfg.get("_config_dir"), Path.cwd(), Path("/workspace/书法展示样片")):
+    # try relative to config, then cwd（旧共享机的绝对路径候选已移除）
+    for root in (cfg.get("_config_dir"), Path.cwd()):
         if root is None:
             continue
         cand = (Path(root) / p).resolve()

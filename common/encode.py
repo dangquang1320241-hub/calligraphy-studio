@@ -47,30 +47,36 @@ def render_frames_to_mp4(frame_iter, n_frames, fps, w, h, audio_path, out_path, 
         str(duration if duration is not None else n_frames / fps),
         str(tmp),
     ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    assert proc.stdin is not None
-    write_err = None
-    try:
-        for i, frame in enumerate(frame_iter):
-            if isinstance(frame, (bytes, bytearray)):
-                proc.stdin.write(frame)
-            else:
-                proc.stdin.write(frame.tobytes())
-            if (i + 1) % 30 == 0 or i == 0:
-                print(f"  frame {i+1}/{n_frames}", flush=True)
-    except BrokenPipeError as e:
-        write_err = e
-    try:
-        proc.stdin.close()
-    except Exception:
-        pass
-    stdout, stderr = proc.stdout.read(), proc.stderr.read()
-    proc.wait()
-    if proc.returncode != 0:
-        err = stderr[-4000:].decode("utf-8", "replace") if stderr else str(write_err)
-        raise RuntimeError(f"ffmpeg failed (code {proc.returncode}):\n{err}")
-    tmp.replace(out_path)
-    return out_path
+    # stderr 进临时文件而非 PIPE：ffmpeg -stats 会持续写 stderr，写帧期间无人排空管道
+    # 会在 64KB 写满后与 stdin 写入互锁（长渲染死锁）；stdout 弃之（无信息量）。
+    import tempfile
+    with tempfile.TemporaryFile() as err_f:
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=err_f)
+        assert proc.stdin is not None
+        write_err = None
+        try:
+            for i, frame in enumerate(frame_iter):
+                if isinstance(frame, (bytes, bytearray)):
+                    proc.stdin.write(frame)
+                else:
+                    proc.stdin.write(frame.tobytes())
+                if (i + 1) % 30 == 0 or i == 0:
+                    print(f"  frame {i+1}/{n_frames}", flush=True)
+        except BrokenPipeError as e:
+            write_err = e
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+        proc.wait()
+        err_f.seek(0)
+        stderr = err_f.read()
+        if proc.returncode != 0:
+            err = stderr[-4000:].decode("utf-8", "replace") if stderr else str(write_err)
+            tmp.unlink(missing_ok=True)  # 失败不残留半成品
+            raise RuntimeError(f"ffmpeg failed (code {proc.returncode}):\n{err}")
+        tmp.replace(out_path)
+        return out_path
 
 
 def ffprobe_check(path: Path) -> dict:
@@ -153,6 +159,9 @@ def extract_frames(path: Path, times, out_dir: Path, prefix="frame"):
             check=True,
             capture_output=True,
         )
+        if not dest.exists():
+            # ffmpeg -ss 越过视频末尾时以 0 退出但不出文件——不校验会把不存在路径传给下游
+            raise RuntimeError(f"取帧失败 t={t:.2f}s（越界或解码失败）：{path.name}")
         paths.append(dest)
     return paths
 

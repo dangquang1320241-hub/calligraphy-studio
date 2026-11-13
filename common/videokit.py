@@ -61,6 +61,8 @@ def paper_mask(img, crop=None, feather=1.5):
     k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, k, iterations=2)
     n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
+    if n <= 1:
+        raise ValueError('未能在照片中定位纸面（偏冷/灰调照片缺少暖色亮区）；请提供含暖色纸面的原图')
     idx = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
     m = (lab == idx).astype(np.uint8) * 255
     cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -101,7 +103,8 @@ def ffprobe_report(mp4):
             summ['integrated_lufs'] = float(line.split()[1])
         if line.startswith('Peak:'):
             summ['true_peak_dbfs'] = float(line.split()[1])
-    rep = {'video': json.loads(v).get('streams', [{}])[0], 'audio': json.loads(a).get('streams', [{}])[0],
+    rep = {'video': (json.loads(v).get('streams') or [{}])[0],
+           'audio': (json.loads(a).get('streams') or [{}])[0],  # 无音轨 mp4 不再 IndexError
            'format': json.loads(d).get('format', {}), 'decode_ok': dec.returncode == 0 and not dec.stderr.strip(),
            'loudness': summ, 'sha256': sha256(mp4)}
     return rep
@@ -114,6 +117,8 @@ def grab_frames(mp4, times, outdir):
     for i, t in enumerate(times):
         p = outdir / f'kf_{i:02d}_{t:06.2f}.png'
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{t:.3f}', '-i', mp4, '-frames:v', '1', str(p)], check=True)
+        if not p.exists():
+            raise RuntimeError(f'取帧失败 t={t:.2f}s（越界或解码失败）：{Path(mp4).name}')
         paths.append(p)
     return paths
 

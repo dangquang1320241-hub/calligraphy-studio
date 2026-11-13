@@ -44,6 +44,10 @@ def test_style_build_config(built_profile, tmp_path, style):
     assert cfg["output_name"]
     if style == "笔顺复现":
         assert cfg["columns_text"] == ["甲乙丙", "丁戊己", "庚辛壬", "癸子丑"]
+        # B 族公共字段统一走 stylekit.common_artwork_fields（原手工内联已收敛）
+        assert cfg["artwork"] and cfg["cleaned"] and cfg["geometry_prep"]["scale"] == 2.0
+    if style == "书写路径":
+        assert "loudness" not in cfg  # 死键移除：渲染器从未读它，写了也不生效
     if style == "临帖对比":
         assert cfg["chars"][0]["work_box"] and cfg["chars"][0]["ref_box"]
     if style == "慢揭幕":
@@ -53,3 +57,18 @@ def test_style_build_config(built_profile, tmp_path, style):
 def test_styles_registry_complete():
     from core.orchestrate import discover_styles
     assert len(discover_styles()) == 12
+
+
+def test_render_cmd_b_flag_passthrough(tmp_path):
+    # 回归：B 族 --preview/--skip-tts 曾被编排器静默丢弃；透传按各渲染器 argparse 声明适配
+    from core.stylekit import render_cmd_b
+
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({"output_name": "x", "width": 1080, "height": 1920}), encoding="utf-8")
+    pd = tmp_path / "proj"
+    # 墨色呼吸：--preview 为 store_true 布尔 → 只传旗标；不支持 --skip-tts → 不传
+    cmd = render_cmd_b("moyu", "render_moyu.py")(str(cfg_path), pd, preview=3, skip_tts=True)
+    assert cmd[-1] == "--preview" and "--skip-tts" not in cmd
+    # 慢揭幕：未声明 --preview → 完全不透传（避免 argparse 崩溃）
+    cmd2 = render_cmd_b("manjieman", "render_manjieman.py")(str(cfg_path), pd, preview=3, skip_tts=False)
+    assert "--preview" not in cmd2

@@ -62,7 +62,7 @@ def parallel_frames(frame_fn, n_frames, workers=None, chunk=4):
 def text_rgba(text, size, fill=(243, 232, 212), tracking=0, shadow=True):
     f = wk(size)
     d = ImageDraw.Draw(Image.new("RGBA", (8, 8)))
-    if tracking:
+    if tracking and text:  # 空文本 + tracking 曾在 max(空) 崩溃
         ws = [d.textbbox((0, 0), ch, font=f) for ch in text]
         w = sum(b[2] - b[0] for b in ws) + tracking * (len(text) - 1) + 12
         h = max(b[3] for b in ws) + 12

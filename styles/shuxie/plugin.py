@@ -21,7 +21,6 @@ DEFAULTS = {
     "timing": {"intro_secs": 2.5, "pause": 0.08, "hold_secs": 2.0, "end_secs": 3.5},
     "music": {"seed": 21, "bpm": 56, "density": 0.5, "accent_every": 4},
     "music_gain_db": -6,
-    "loudness": {"I": -16, "TP": -1.5, "LRA": 11},
     "layout": {"width": 1080, "height": 1920, "fps": 30, "bg_color": "#1b1815",
                "full_window": [50, 400, 930, 1240], "focus_window": [150, 170, 810, 1300],
                "text_center_x": 480, "title_y": 260, "title_size": 72, "end_y": 1380, "end_size": 72},
@@ -64,7 +63,6 @@ def build_config(profile: dict, project_dir: Path, params: dict | None = None) -
         "focus": params.get("focus", []),
         "timing": {**DEFAULTS["timing"], **params.get("timing", {})},
         "music": {**DEFAULTS["music"], **params.get("music", {})},
-        "loudness": params.get("loudness", DEFAULTS["loudness"]),
         "layout": {**DEFAULTS["layout"], **params.get("layout", {})},
         "_note": "strokes 为逐字矩形草稿（示意），正式使用请精修为笔画级多边形",
     }

@@ -19,7 +19,8 @@ def sheet_for(mp4: Path, out_dir: Path, n: int = 6, title: str = "") -> Path:
     dur = float(ffprobe_check(mp4)["duration"] or 0)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    times = [round(dur * (i + 0.5) / n, 1) for i in range(n)]
+    hi = max(0.0, dur - 0.2)  # 取帧时刻钳在末尾前，防 -ss 越界拿不到帧
+    times = [min(round(dur * (i + 0.5) / n, 1), hi) for i in range(n)]
     frames = grab_frames(str(mp4), times, out_dir / "frames")
     labels = [f"{t:.1f}s" for t in times]
     return contact_sheet(frames, labels, out_dir / "编排联系表.jpg")
