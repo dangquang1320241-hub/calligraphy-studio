@@ -47,7 +47,7 @@ def test_style_build_config(built_profile, tmp_path, style):
     if style == "临帖对比":
         assert cfg["chars"][0]["work_box"] and cfg["chars"][0]["ref_box"]
     if style == "慢揭幕":
-        assert cfg["passage_lines"] == ["甲乙丙，", "丁戊己。", "庚辛壬；", "癸子丑"]
+        assert cfg["passage_lines"] == ["甲乙丙，丁戊己。", "庚辛壬；", "癸子丑"]  # 揭开字幕按句级换行
 
 
 def test_styles_registry_complete():
