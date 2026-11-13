@@ -63,6 +63,17 @@
 | confirm：逐列权威 + 读音写入 + 状态翻转 | test_web_confirm |
 | 同作品任务互斥 → 409 | test_web_busy |
 | make：任务启动与状态查询（预览渲，需网络 → 门控） | test_web_make（门控） |
+| slug 路径逃逸/非法标识 → 400 | test_web_slug_rejected |
+| 上传非图片 → 415 | test_web_upload_validation |
+| 任务状态落盘（重启不丢） | test_jobs_persist |
+
+### common 层回归
+| 分支 | 用例 |
+|---|---|
+| audio_align 越界窗（vo 越过音频末尾）→ ✗ 不崩溃/不出 NaN | test_audio_align（vo_S05 行） |
+| grab_frames -ss 越界 → 显式报错 | test_grab_frames_out_of_range |
+| encode 写帧（stderr 临时文件路径）基本完好 | test_encode_smoke |
+| stylekit render_cmd_b 按渲染器声明透传 preview/skip-tts | test_render_cmd_b_flag_passthrough |
 
 ### 集成（门控 RUN_RENDER_TESTS=1）
 - 朗读版 --preview 5 全链路（真实 TTS）
@@ -72,4 +83,5 @@
 .venv/bin/python -m pytest tests/ -q          # 单元+接口（无网络）
 RUN_RENDER_TESTS=1 .venv/bin/python -m pytest tests/ -q  # 含集成
 .venv/bin/python -m pytest tests/ -q --cov=core --cov=styles --cov-report=term-missing
+uvx ruff check core common styles webapp tests --select E9,F   # 错误级静态检查（dev 组含 ruff）
 ```
