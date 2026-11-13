@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>calligraphy-studio · 书法视频工作台</title>
+<style>
+  :root { --bg:#171412; --panel:#221d19; --line:#3a322b; --ink:#efe6d2; --sub:#b8a98f; --accent:#b03a2e; --ok:#4e9a5f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 "PingFang SC","Microsoft YaHei",sans-serif; }
+  header { display:flex; gap:8px; align-items:center; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0 14px 0 0; color:var(--sub); font-weight:500; }
+  nav button { background:none; border:1px solid var(--line); color:var(--ink); padding:6px 14px; border-radius:8px; cursor:pointer; font-size:14px; }
+  nav button.on { background:var(--accent); border-color:var(--accent); }
+  main { max-width:1080px; margin:20px auto; padding:0 16px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin-bottom:16px; }
+  .card h2 { font-size:15px; margin:0 0 12px; color:var(--sub); font-weight:600; letter-spacing:1px; }
+  label { display:block; margin:10px 0 4px; color:var(--sub); font-size:13px; }
+  input, textarea, select { width:100%; background:#191512; border:1px solid var(--line); color:var(--ink); padding:8px 10px; border-radius:8px; font:inherit; }
+  textarea { min-height:90px; resize:vertical; }
+  button.go { background:var(--accent); border:none; color:#fff; padding:9px 22px; border-radius:8px; cursor:pointer; font-size:15px; }
+  button.min { background:none; border:1px solid var(--line); color:var(--ink); padding:5px 12px; border-radius:6px; cursor:pointer; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > * { flex:1; min-width:180px; }
+  pre.log { background:#100d0b; border:1px solid var(--line); border-radius:8px; padding:10px; font:12px/1.5 Menlo,monospace; max-height:260px; overflow:auto; white-space:pre-wrap; }
+  img.ovl { max-width:100%; border-radius:8px; border:1px solid var(--line); }
+  .crops img { max-height:300px; margin:6px; border-radius:8px; border:1px solid var(--line); vertical-align:top; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
+  input.cnt { width:64px; text-align:center; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:6px; background:#3a322b; color:var(--sub); margin-left:6px; }
+  .badge.ok { background:#2d4a34; color:#9fd0aa; }
+  .badge.warn { background:#4a3a2d; color:#e0b47f; }
+  .styles { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+  .styles button { padding:14px 8px; background:#191512; border:1px solid var(--line); color:var(--ink); border-radius:10px; cursor:pointer; font-size:15px; }
+  .styles button.on { border-color:var(--accent); background:#2a1c17; }
+  .muted { color:var(--sub); font-size:13px; }
+  .ok-msg { color:#9fd0aa; }
+  .hide { display:none; }
+  .step-note { color:var(--sub); font-size:13px; margin:6px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>calligraphy-studio</h1>
+  <nav>
+    <button data-v="v1" class="on">① 上传构建</button>
+    <button data-v="v2">② 列框确认</button>
+    <button data-v="v3">③ 释文确认</button>
+    <button data-v="v4">④ 风格出片</button>
+  </nav>
+  <span id="slugBadge" class="badge hide"></span>
+</header>
+<main>
+
+<!-- ① 上传构建 -->
+<section id="v1">
+  <div class="card">
+    <h2>① 上传作品照片，构建档案</h2>
+    <div class="row">
+      <div>
+        <label>作品标识（档案目录名，如 三槐堂铭节选）</label>
+        <input id="newSlug" placeholder="例：临江仙节选">
+      </div>
+      <div>
+        <label>作品照片（JPG）</label>
+        <input id="newImage" type="file" accept="image/*">
+      </div>
+    </div>
+    <label>释文（可先留空，之后在③逐列确认；含标点，从右到左的阅读顺序）</label>
+    <textarea id="newText" placeholder="例：槐阴满庭。吾侪小人，朝不及夕，……"></textarea>
+    <p class="step-note">构建内容：EXIF 归正 → 几何摆正 → 自动列/字检测 → 列框确认图。约 10–30 秒。</p>
+    <button class="go" onclick="createProfile()">构建档案</button>
+    <pre id="job1" class="log hide"></pre>
+  </div>
+  <div class="card">
+    <h2>已有作品</h2>
+    <table id="libTable"><tr><th>作品</th><th>释文状态</th><th>列数</th><th>日期</th><th></th></tr></table>
+  </div>
+</section>
+
+<!-- ② 列框确认 -->
+<section id="v2" class="hide">
+  <div class="card">
+    <h2>② 列框确认 <span class="muted">—— 红框是否套住每一列？逐字标注是否正确？</span></h2>
+    <img id="ovlImg" class="ovl">
+    <div class="row" style="margin-top:12px">
+      <div style="flex:2">
+        <label>各列字数（右→左；与确认图不符可直接改）</label>
+        <div id="cntBox" class="row"></div>
+      </div>
+      <div>
+        <label>末列含落款</label>
+        <select id="sigSel"><option value="">无</option><option value="1">有落款</option></select>
+      </div>
+    </div>
+    <button class="min" onclick="rebuild()">按上面的字数重建档案</button>
+    <span class="muted">（重建后字框/裁图会更新）</span>
+    <pre id="job2" class="log hide"></pre>
+  </div>
+  <button class="go" onclick="goto(3)">下一步：释文确认 →</button>
+</section>
+
+<!-- ③ 释文确认 -->
+<section id="v3" class="hide">
+  <div class="card">
+    <h2>③ 逐列对照，确认释文 <span class="muted">—— 左图右文，一字一格</span></h2>
+    <div id="cropsBox" class="crops"></div>
+    <div id="colTexts"></div>
+    <label>合成全文（可整体微调，列字数以各列框为准）</label>
+    <textarea id="fullText"></textarea>
+    <h2 style="margin-top:16px">多音字定读音</h2>
+    <table id="pronTable"></table>
+    <p class="step-note">读音确认写入档案后，出片时自动用同音字纠正 TTS。未列出的字按默认读音。</p>
+    <button class="go" onclick="confirmText()">确认写入档案</button>
+    <pre id="job3" class="log hide"></pre>
+    <p id="confirmDone" class="ok-msg hide">✓ 已确认（human-confirmed），可以出片了。</p>
+  </div>
+  <button class="go" onclick="goto(4)">下一步：风格出片 →</button>
+</section>
+
+<!-- ④ 风格出片 -->
+<section id="v4" class="hide">
+  <div class="card">
+    <h2>④ 选择风格出片</h2>
+    <div id="styleGrid" class="styles"></div>
+    <div id="styleForm">
+      <div class="row">
+        <div><label>片头标题</label><input id="mTitle" placeholder="《作品名》节选"></div>
+        <div><label>署名</label><input id="mAuthor" placeholder="作者名"></div>
+        <div><label>副标题</label><input id="mSub" placeholder="行草"></div>
+      </div>
+      <label>风格参数 JSON（可选：sentences / scene / char / highlights / evolution …）</label>
+      <textarea id="mParams" placeholder="{}" style="min-height:60px"></textarea>
+      <label class="row" style="align-items:center"><input type="checkbox" id="mPreview" style="width:auto"> 先出预览（朗读版/书写路径等支持）</label>
+      <button class="go" onclick="make()">出片</button>
+    </div>
+    <pre id="job4" class="log hide"></pre>
+    <p id="done4" class="ok-msg hide"></p>
+  </div>
+  <div class="card">
+    <h2>最近任务</h2>
+    <table id="jobTable"></table>
+  </div>
+</section>
+
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+let SLUG = null, STYLE = null, PRON = {};
+
+// 导航
+$$('nav button').forEach(b => b.onclick = () => goto(+b.dataset.v.slice(1)));
+function goto(v) {
+  $$('nav button').forEach(b => b.classList.toggle('on', +b.dataset.v.slice(1) === v));
+  ['v1','v2','v3','v4'].forEach((id, i) => $('#'+id).classList.toggle('hide', i+1 !== v));
+  if (v === 1) loadLib();
+  if (SLUG) { if (v === 2) loadOverlay(); if (v === 3) loadConfirm(); if (v === 4) loadStyles(); }
+}
+
+async function api(path, opt) {
+  const r = await fetch(path, opt);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+
+function badge(slug) {
+  const b = $('#slugBadge');
+  b.textContent = '当前作品：' + slug;
+  b.classList.remove('hide');
+}
+
+// 任务轮询
+function pollJob(id, pre, cb) {
+  const el = $(pre); el.classList.remove('hide');
+  const t = setInterval(async () => {
+    const j = await api('/api/jobs/' + id);
+    el.textContent = `【${j.label}】${j.status}\n` + j.tail;
+    if (j.status !== 'running') {
+      clearInterval(t);
+      cb && cb(j);
+    }
+  }, 1500);
+}
+
+// ① 上传 + 作品库
+async function createProfile() {
+  const slug = $('#newSlug').value.trim();
+  if (!slug || !$('#newImage').files[0]) return alert('请填作品标识并选择照片');
+  const fd = new FormData();
+  fd.append('slug', slug); fd.append('text', $('#newText').value); fd.append('image', $('#newImage').files[0]);
+  const {job} = await api('/api/profiles', {method:'POST', body:fd});
+  SLUG = slug; badge(slug);
+  pollJob(job, '#job1', j => { if (j.status === 'done') { goto(2); loadLib(); } });
+}
+async function loadLib() {
+  const items = await api('/api/library');
+  const t = $('#libTable'); t.innerHTML = '<tr><th>作品</th><th>释文状态</th><th>列数</th><th>日期</th><th></th></tr>';
+  for (const it of items) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${it.slug}</td>
+      <td><span class="badge ${it.confidence === 'human-confirmed' ? 'ok' : 'warn'}">${it.confidence || '—'}</span></td>
+      <td>${it.n_columns}</td><td>${it.date}</td>
+      <td><button class="min" onclick="openSlug('${it.slug}')">打开</button></td>`;
+    t.appendChild(tr);
+  }
+}
+function openSlug(slug) { SLUG = slug; badge(slug); goto(2); }
+
+// ② 列框确认
+async function loadOverlay() {
+  const p = await api('/api/profiles/' + encodeURIComponent(SLUG));
+  $('#ovlImg').src = p.preview.overlay + '?t=' + Date.now();
+  const box = $('#cntBox'); box.innerHTML = '';
+  p.counts.forEach((n, i) => {
+    const d = document.createElement('div');
+    d.innerHTML = `<label>列${i + 1}</label><input class="cnt" value="${n}" data-i="${i}">`;
+    box.appendChild(d);
+  });
+  $('#sigSel').value = '';
+}
+async function rebuild() {
+  const counts = [...$('#cntBox').querySelectorAll('input')].map(i => +i.value);
+  const {job} = await api('/api/profiles/' + encodeURIComponent(SLUG) + '/rebuild',
+    {method:'POST', headers:{'Content-Type':'application/json'},
+     body: JSON.stringify({col_counts: counts, signature: $('#sigSel').value === '1'})});
+  pollJob(job, '#job2', j => { if (j.status === 'done') loadOverlay(); });
+}
+
+// ③ 释文确认
+async function loadConfirm() {
+  const p = await api('/api/profiles/' + encodeURIComponent(SLUG));
+  const cb = $('#cropsBox'); cb.innerHTML = '';
+  for (let i = 1; i <= p.preview.n_crops; i++) {
+    const img = document.createElement('img');
+    img.src = `${p.preview.crops_dir}/col${String(i).padStart(2, '0')}.jpg?t=${Date.now()}`;
+    cb.appendChild(img);
+  }
+  const ct = $('#colTexts'); ct.innerHTML = '';
+  (p.per_column.length ? p.per_column : p.counts.map(() => '')).forEach((t, i) => {
+    const d = document.createElement('div');
+    d.innerHTML = `<label>第 ${i + 1} 列（右起，${p.counts[i]} 字，不含标点）</label>
+                   <input data-i="${i}" value="${t}">`;
+    ct.appendChild(d);
+  });
+  $('#fullText').value = p.text;
+  PRON = {};
+  const prons = await api('/api/profiles/' + encodeURIComponent(SLUG) + '/pron');
+  const pt = $('#pronTable');
+  pt.innerHTML = prons.length ? '<tr><th>字</th><th>候选读音</th><th>状态</th><th>TTS 同音字（可空）</th></tr>' : '<tr><td class="muted">未检出多音字</td></tr>';
+  prons.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${r.char}</b></td><td>${r.readings.join(' / ')}</td>
+      <td><span class="badge ${r.state === '已确认' ? 'ok' : 'warn'}">${r.state}</span></td>
+      <td><input class="pron-tts" data-ch="${r.char}" value="${r.tts_char || ''}" placeholder="如：招"></td>`;
+    pt.appendChild(tr);
+  });
+}
+async function confirmText() {
+  const counts = [...$('#cntBox').querySelectorAll('input')].map(i => +i.value);
+  const pron = {};
+  $$('#pronTable .pron-tts').forEach(inp => {
+    const ch = inp.dataset.ch, v = inp.value.trim();
+    if (v) pron[ch] = {tts_char: v, pinyin: '', status: 'human-confirmed'};
+  });
+  const {job} = await api('/api/profiles/' + encodeURIComponent(SLUG) + '/confirm',
+    {method:'POST', headers:{'Content-Type':'application/json'},
+     body: JSON.stringify({text: $('#fullText').value, pronunciation: pron, col_counts: counts})});
+  pollJob(job, '#job3', j => { if (j.status === 'done') { $('#confirmDone').classList.remove('hide'); loadLib(); } });
+}
+
+// ④ 风格出片
+async function loadStyles() {
+  const styles = await api('/api/styles');
+  const g = $('#styleGrid'); g.innerHTML = '';
+  Object.entries(styles).forEach(([name, meta], i) => {
+    const b = document.createElement('button');
+    b.innerHTML = `${name}<br><span class="muted" style="font-size:11px">${meta.needs_text ? '需释文' : '无需释文'} · ${meta.granularity}</span>`;
+    b.onclick = () => { STYLE = name; $$('#styleGrid button').forEach(x => x.classList.remove('on')); b.classList.add('on'); };
+    if (i === 0) { STYLE = name; b.classList.add('on'); }
+    g.appendChild(b);
+  });
+}
+async function make() {
+  let params = {};
+  const raw = $('#mParams').value.trim();
+  if (raw && raw !== '{}') params = JSON.parse(raw);
+  const body = {slug: SLUG, style: STYLE, title: $('#mTitle').value, author: $('#mAuthor').value,
+                title_sub: $('#mSub').value, params};
+  if ($('#mPreview').checked) body.preview = 8;
+  const {job} = await api('/api/make', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  $('#done4').classList.add('hide');
+  pollJob(job, '#job4', j => {
+    if (j.status === 'done') {
+      const m = j.tail.match(/成片\/(\S+\.mp4)/);
+      $('#done4').textContent = '✓ 出片完成' + (m ? '：' + m[1] : '');
+      $('#done4').classList.remove('hide');
+    }
+    loadJobs();
+  });
+}
+async function loadJobs() {
+  const js = await api('/api/jobs');
+  const t = $('#jobTable');
+  t.innerHTML = '<tr><th>时间</th><th>任务</th><th>状态</th></tr>';
+  js.forEach(j => {
+    const tr = document.createElement('tr');
+    const cls = j.status === 'running' ? 'warn' : (j.status === 'done' ? 'ok' : '');
+    tr.innerHTML = `<td>${j.ts}</td><td>${j.label}</td><td><span class="badge ${cls}">${j.status}</span></td>`;
+    t.appendChild(tr);
+  });
+}
+
+loadLib();
+setInterval(loadJobs, 5000);
+</script>
+</body>
+</html>
