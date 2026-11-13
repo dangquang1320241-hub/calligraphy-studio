@@ -60,3 +60,7 @@ def build_config(profile: dict, project_dir: Path, params: dict | None = None) -
     est = cfg["timing"]["title_seconds"] + len(cfg["scenes"]) * cfg["timing"]["scene_seconds"] + cfg["timing"]["end_card_seconds"]
     return {"config": str(cfg_path), "note": f"B 族：{len(cfg['scenes'])} 个场景（示意底图随工具库分发，角标「场景为示意」）",
             "durations_estimate": f"~{est:.0f}s"}
+
+# 该渲染器 CLI 为 --config/--out（B 族约定），编排器经 render_cmd 调用
+from core import stylekit as _sk  # noqa: E402
+render_cmd = _sk.render_cmd_b("ruhua", "render_ruhua.py")

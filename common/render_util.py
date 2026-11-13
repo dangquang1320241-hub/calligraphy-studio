@@ -16,6 +16,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+# macOS 上 fork 会复制已初始化的 cv2 线程池并死锁子进程——并行前必须单线程化 cv2
+try:
+    import cv2
+    cv2.setNumThreads(0)
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+except Exception:  # noqa: BLE001
+    pass
+
 COMMON = Path(__file__).resolve().parent
 sys.path.insert(0, str(COMMON))
 WENKAI = str(COMMON / "fonts" / "LXGWWenKai-Regular.ttf")

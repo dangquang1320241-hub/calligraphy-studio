@@ -6,6 +6,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
+from core import stylekit  # noqa: E402  # render_cmd 钩子所在
 
 NAME = "笔顺复现"
 NEEDS_TEXT = True
@@ -54,3 +55,6 @@ def build_config(profile: dict, project_dir: Path, params: dict | None = None) -
     est = t["title_seconds"] + t["lead_in"] + t["writing_seconds"] + t["zoom_out_seconds"] + t["end_card_seconds"]
     return {"config": str(cfg_path), "note": "笔顺为算法示意（角标已固定）；char_cuts 可修切字",
             "durations_estimate": f"~{est:.0f}s"}
+
+# 该渲染器 CLI 为 --config/--out（B 族约定），编排器经 render_cmd 调用
+render_cmd = stylekit.render_cmd_b("bishun", "render_bishun.py")

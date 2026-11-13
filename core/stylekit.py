@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """M5 B 族共享小助手：档案 → 慢揭幕/逐字特写/笔顺复现 的公共字段。"""
+import json
 import sys
 from pathlib import Path
 
@@ -45,3 +46,16 @@ def passage_lines(text: str) -> list:
     if strip_punct(buf):
         out.append(buf)
     return out
+
+
+def render_cmd_b(style_dir: str, renderer_filename: str):
+    """B 族渲染器 CLI 工厂：--config --out（必填 --out 直出文件，无 --preview/--skip-tts）。"""
+    def _cmd(cfg_path, project_dir, preview=None, skip_tts=False):
+        cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
+        name = cfg.get("output_name", "out")
+        W, H = cfg.get("width", 1080), cfg.get("height", 1920)
+        out = Path(project_dir) / "成片" / f"{name}_{W}x{H}.mp4"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        return [sys.executable, str(Path(REPO) / "styles" / style_dir / renderer_filename),
+                "--config", str(cfg_path), "--out", str(out)]
+    return _cmd

@@ -10,6 +10,37 @@ from scipy.io import wavfile
 SR = 48000
 
 
+def sheet_for(mp4: Path, out_dir: Path, n: int = 6, title: str = "") -> Path:
+    """通用关键帧联系表（渲染器没自带时兜底）。"""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+    from videokit import contact_sheet, grab_frames  # noqa: E402
+    import json as _json
+    dur = float(ffprobe_check(mp4)["duration"] or 0)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    times = [round(dur * (i + 0.5) / n, 1) for i in range(n)]
+    frames = grab_frames(str(mp4), times, out_dir / "frames")
+    labels = [f"{t:.1f}s" for t in times]
+    return contact_sheet(frames, labels, out_dir / "编排联系表.jpg")
+
+
+def ffprobe_check(mp4: Path) -> dict:
+    """通用 ffprobe 校验（解码无错 + 时长 + 规格摘要），供无自带报告的渲染器兜底。"""
+    import subprocess
+    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames",
+                        "-show_entries", "stream=width,height,r_frame_rate,nb_read_frames:format=duration",
+                        "-of", "json", str(mp4)], capture_output=True, text=True)
+    d = json.loads(p.stdout or "{}")
+    streams = d.get("streams") or [{}]
+    s = streams[0]
+    err = subprocess.run(["ffmpeg", "-v", "error", "-i", str(mp4), "-f", "null", "-"],
+                         capture_output=True, text=True).stderr.strip()
+    return {"file": str(mp4), "width": s.get("width"), "height": s.get("height"),
+            "fps": s.get("r_frame_rate"), "frames": s.get("nb_read_frames"),
+            "duration": d.get("format", {}).get("duration"), "decode_ok": not err, "decode_errors": err[:400]}
+
+
 def audio_align(project_dir: Path) -> list:
     """mix.wav 能量包络 vs timeline.csv 各句窗口：窗口内应有人声、窗口外仅底乐。"""
     project_dir = Path(project_dir)

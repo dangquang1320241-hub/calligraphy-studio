@@ -8,9 +8,16 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-FONT_REG = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"
-FONT_BOLD = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
-FONT_INDEX_SC = 2
+_FONT_DIR = Path(__file__).resolve().parent / "fonts"
+_NOTO = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"  # Debian 共享电脑原约定
+if Path(_NOTO).exists():
+    FONT_REG = _NOTO
+    FONT_BOLD = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
+    FONT_INDEX_SC = 2
+else:  # macOS 等：回落到随库分发的霞鹜文楷（SIL OFL）
+    FONT_REG = str(_FONT_DIR / "LXGWWenKai-Regular.ttf")
+    FONT_BOLD = FONT_REG
+    FONT_INDEX_SC = 0
 
 # Dark ink / warm paper palette — unique to this template family
 INK = (28, 22, 18)

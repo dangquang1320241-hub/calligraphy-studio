@@ -84,16 +84,33 @@ def cmd_make(args):
           + (f"；{report['note']}" if report.get("note") else ""))
 
     sdir = Path(plugin.__file__).parent
-    renderer = sdir / "render_langdu.py"
-    if not renderer.exists():
-        renderer = sorted(sdir.glob("render*.py"))[0]
-    cmd = [sys.executable, str(renderer), "--config", str(report["config"])]
-    if args.skip_tts:
-        cmd.append("--skip-tts")
-    if args.preview:
-        cmd += ["--preview", str(args.preview)]
+    if hasattr(plugin, "render_cmd"):  # 风格自带 CLI 约定（如 B 族 --out 直出）
+        cmd = plugin.render_cmd(report["config"], project_dir, args.preview, args.skip_tts)
+    else:
+        renderer = sdir / "render_langdu.py"
+        if not renderer.exists():
+            renderer = sorted(sdir.glob("render*.py"))[0]
+        cmd = [sys.executable, str(renderer), "--config", str(report["config"])]
+        if args.skip_tts:
+            cmd.append("--skip-tts")
+        if args.preview:
+            cmd += ["--preview", str(args.preview)]
     print("渲染：", " ".join(cmd))
     subprocess.run(cmd, check=True)
+
+    # 通用 ffprobe 兜底 QC + 联系表（渲染器没自带时）
+    mp4s = sorted((project_dir / "成片").glob("*.mp4")) if (project_dir / "成片").exists() else []
+    if mp4s:
+        from core import qc
+        rep = qc.ffprobe_check(mp4s[-1])
+        chk = project_dir / "检查记录"
+        chk.mkdir(exist_ok=True)
+        (chk / "编排ffprobe.json").write_text(
+            json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"ffprobe：{rep['width']}x{rep['height']} {rep['duration']}s 解码{'✓' if rep['decode_ok'] else '✗ ' + rep['decode_errors'][:120]}")
+        if not list(chk.glob("*/联系表.jpg")) and not (chk / "联系表.jpg").exists():
+            qc.sheet_for(mp4s[-1], chk)
+            print("编排联系表 →", chk / "编排联系表.jpg")
 
     from core import qc
     if (project_dir / "素材" / "mix.wav").exists() and (project_dir / "timeline.csv").exists():

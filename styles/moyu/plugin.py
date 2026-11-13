@@ -53,3 +53,7 @@ def build_config(profile: dict, project_dir: Path, params: dict | None = None) -
     est = cfg["timing"]["shot_seconds"] * n_shots + cfg["timing"]["opening_text_seconds"] + cfg["timing"]["end_card_seconds"]
     return {"config": str(cfg_path), "note": "B 族：无需释文；镜头自动选 5 处局部",
             "durations_estimate": f"~{est:.0f}s"}
+
+# 该渲染器 CLI 为 --config/--out（B 族约定），编排器经 render_cmd 调用
+from core import stylekit as _sk  # noqa: E402
+render_cmd = _sk.render_cmd_b("moyu", "render_moyu.py")

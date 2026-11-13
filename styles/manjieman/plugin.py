@@ -60,3 +60,6 @@ def _draft_highlights(profile: dict) -> list:
                 out.append({"char": ch["text"], "note": "（点评草稿，请人工确认）",
                             "box": stylekit.char_box_norm(profile, ci, ki)})
     return out
+
+# 该渲染器 CLI 为 --config/--out（B 族约定），编排器经 render_cmd 调用
+render_cmd = stylekit.render_cmd_b("manjieman", "render_manjieman.py")

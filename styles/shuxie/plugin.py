@@ -19,10 +19,12 @@ GRANULARITY = "stroke-reveal"
 DEFAULTS = {
     "grade": {"deyellow": 0.25, "contrast": 1.12, "brightness": 1.04},
     "timing": {"intro_secs": 2.5, "pause": 0.08, "hold_secs": 2.0, "end_secs": 3.5},
-    "music": {"seed": 21, "root": 146.83, "bpm": 50, "density": 0.45, "xiao": 0.8,
-              "accent_every": 3, "music_db": -20, "duck_db": -7},
+    "music": {"seed": 21, "bpm": 56, "density": 0.5, "accent_every": 4},
+    "music_gain_db": -6,
     "loudness": {"I": -16, "TP": -1.5, "LRA": 11},
-    "layout": {"width": 1080, "height": 1920, "fps": 30, "bg_color": "#1b1815"},
+    "layout": {"width": 1080, "height": 1920, "fps": 30, "bg_color": "#1b1815",
+               "full_window": [50, 400, 930, 1240], "focus_window": [150, 170, 810, 1300],
+               "text_center_x": 480, "title_y": 260, "title_size": 72, "end_y": 1380, "end_size": 72},
 }
 
 
