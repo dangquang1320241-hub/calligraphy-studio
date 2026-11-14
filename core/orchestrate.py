@@ -55,6 +55,76 @@ def ensure_profile(args) -> dict:
     return prof
 
 
+def newest_mp4(project_dir: Path):
+    """成片目录最新 mp4（按 mtime）；无则 None。历史残留的旧半成品不干扰 QC/索引。"""
+    d = project_dir / "成片"
+    mp4s = sorted(d.glob("*.mp4"), key=lambda p: p.stat().st_mtime) if d.exists() else []
+    return mp4s[-1] if mp4s else None
+
+
+def build_render_cmd(plugin, report: dict, project_dir: Path, preview, skip_tts) -> list:
+    """渲染命令：render_cmd 钩子优先；否则 A 族 --config 约定（--skip-tts 仅对声明的渲染器传）。"""
+    sdir = Path(plugin.__file__).parent
+    if hasattr(plugin, "render_cmd"):  # 风格自带 CLI 约定（如 B 族 --out 直出）
+        return plugin.render_cmd(report["config"], project_dir, preview, skip_tts)
+    renderer = sdir / "render_langdu.py"
+    if not renderer.exists():
+        renderer = sorted(sdir.glob("render*.py"))[0]
+    cmd = [sys.executable, str(renderer), "--config", str(report["config"])]
+    if skip_tts and '"--skip-tts"' in renderer.read_text(encoding="utf-8"):
+        # 部分渲染器（章法解析/节奏卡点/临帖对比/书写路径）未声明 --skip-tts，传了会 argparse 崩溃
+        cmd.append("--skip-tts")
+    if preview:
+        cmd += ["--preview", str(preview)]
+    return cmd
+
+
+def stage_qc(project_dir: Path) -> None:
+    """编排 QC：ffprobe 兜底 + 联系表兜底 + 音画对位（无成片时跳过）。"""
+    from core import qc
+    mp4 = newest_mp4(project_dir)
+    if mp4:
+        rep = qc.ffprobe_check(mp4)
+        chk = project_dir / "检查记录"
+        chk.mkdir(exist_ok=True)
+        (chk / "编排ffprobe.json").write_text(
+            json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"ffprobe：{rep['width']}x{rep['height']} {rep['duration']}s 解码{'✓' if rep['decode_ok'] else '✗ ' + rep['decode_errors'][:120]}")
+        if not list(chk.glob("*/联系表.jpg")) and not (chk / "联系表.jpg").exists():
+            qc.sheet_for(mp4, chk)
+            print("编排联系表 →", chk / "编排联系表.jpg")
+    if (project_dir / "素材" / "mix.wav").exists() and (project_dir / "timeline.csv").exists():
+        align = qc.audio_align(project_dir)
+        bad = [r for r in align if r["对位"] != "✓"]
+        print(f"音画对位：{len(align) - len(bad)}/{len(align)} ✓" + (f"，存疑 {bad}" if bad else ""))
+    else:
+        print("音画对位：跳过（该风格无人声时间线，如 底乐类风格）")
+
+
+def stage_index(args, project_dir: Path) -> None:
+    """发布索引：追加一行；同作品+同风格+同内容（sha 前16）幂等跳过。"""
+    mp4 = newest_mp4(project_dir)
+    if not mp4:
+        return
+    row_sha = sha256(mp4)[:16]
+    idx = Path(args.data_root) / "发布索引.csv"
+    idx.parent.mkdir(parents=True, exist_ok=True)
+    if idx.exists():
+        with open(idx, encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+        if any(r[1:3] == [args.slug, args.style] and r[4:5] == [row_sha] for r in rows[1:]):
+            print("发布索引：同内容已记账，跳过", mp4)
+            return
+    new = not idx.exists()
+    with open(idx, "a", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["日期", "作品", "风格", "文件", "sha256前16"])
+        w.writerow([datetime.now().strftime("%Y-%m-%d"), args.slug, args.style,
+                    str(mp4), row_sha])
+    print("发布索引 +1：", mp4)
+
+
 def cmd_make(args):
     styles = discover_styles()
     if args.style not in styles:
@@ -82,58 +152,12 @@ def cmd_make(args):
           f"预计 {report.get('durations_estimate', '?')}）"
           + (f"；{report['note']}" if report.get("note") else ""))
 
-    sdir = Path(plugin.__file__).parent
-    if hasattr(plugin, "render_cmd"):  # 风格自带 CLI 约定（如 B 族 --out 直出）
-        cmd = plugin.render_cmd(report["config"], project_dir, args.preview, args.skip_tts)
-    else:
-        renderer = sdir / "render_langdu.py"
-        if not renderer.exists():
-            renderer = sorted(sdir.glob("render*.py"))[0]
-        cmd = [sys.executable, str(renderer), "--config", str(report["config"])]
-        if args.skip_tts and '"--skip-tts"' in renderer.read_text(encoding="utf-8"):
-            # 部分渲染器（章法解析/节奏卡点/临帖对比/书写路径）未声明 --skip-tts，传了会 argparse 崩溃
-            cmd.append("--skip-tts")
-        if args.preview:
-            cmd += ["--preview", str(args.preview)]
+    cmd = build_render_cmd(plugin, report, project_dir, args.preview, args.skip_tts)
     print("渲染：", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
-    # 通用 ffprobe 兜底 QC + 联系表（渲染器没自带时）
-    mp4s = sorted((project_dir / "成片").glob("*.mp4"), key=lambda p: p.stat().st_mtime) \
-        if (project_dir / "成片").exists() else []
-    if mp4s:
-        from core import qc
-        rep = qc.ffprobe_check(mp4s[-1])  # 最新_mtime：历史上残留的旧半成品不干扰
-        chk = project_dir / "检查记录"
-        chk.mkdir(exist_ok=True)
-        (chk / "编排ffprobe.json").write_text(
-            json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"ffprobe：{rep['width']}x{rep['height']} {rep['duration']}s 解码{'✓' if rep['decode_ok'] else '✗ ' + rep['decode_errors'][:120]}")
-        if not list(chk.glob("*/联系表.jpg")) and not (chk / "联系表.jpg").exists():
-            qc.sheet_for(mp4s[-1], chk)
-            print("编排联系表 →", chk / "编排联系表.jpg")
-
-    from core import qc
-    if (project_dir / "素材" / "mix.wav").exists() and (project_dir / "timeline.csv").exists():
-        align = qc.audio_align(project_dir)
-        bad = [r for r in align if r["对位"] != "✓"]
-        print(f"音画对位：{len(align) - len(bad)}/{len(align)} ✓" + (f"，存疑 {bad}" if bad else ""))
-    else:
-        print("音画对位：跳过（该风格无人声时间线，如 底乐类风格）")
-
-    # 发布索引
-    mp4s = sorted((project_dir / "成片").glob("*.mp4"), key=lambda p: p.stat().st_mtime)
-    if mp4s:
-        mp4 = mp4s[-1]
-        idx = Path(args.data_root) / "发布索引.csv"
-        new = not idx.exists()
-        with open(idx, "a", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            if new:
-                w.writerow(["日期", "作品", "风格", "文件", "sha256前16"])
-            w.writerow([datetime.now().strftime("%Y-%m-%d"), args.slug, args.style,
-                        str(mp4), sha256(mp4)[:16]])
-        print("发布索引 +1：", mp4)
+    stage_qc(project_dir)
+    stage_index(args, project_dir)
     print("\n✅ 完成。人工确认点：")
     print("  1) 列框确认图：", prof["_dir"] / "列框确认图.jpg")
     print("  2) 释文：", prof["_dir"] / "释文.txt")

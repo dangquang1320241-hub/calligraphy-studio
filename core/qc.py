@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io import wavfile
 
-SR = 48000
+from core.tts import SR  # 采样率单一来源（TTS/混音/对位全链路 48k）
 
 
 def sheet_for(mp4: Path, out_dir: Path, n: int = 6, title: str = "") -> Path:
@@ -26,19 +26,11 @@ def sheet_for(mp4: Path, out_dir: Path, n: int = 6, title: str = "") -> Path:
 
 
 def ffprobe_check(mp4: Path) -> dict:
-    """通用 ffprobe 校验（解码无错 + 时长 + 规格摘要），供无自带报告的渲染器兜底。"""
-    import subprocess
-    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames",
-                        "-show_entries", "stream=width,height,r_frame_rate,nb_read_frames:format=duration",
-                        "-of", "json", str(mp4)], capture_output=True, text=True)
-    d = json.loads(p.stdout or "{}")
-    streams = d.get("streams") or [{}]
-    s = streams[0]
-    err = subprocess.run(["ffmpeg", "-v", "error", "-i", str(mp4), "-f", "null", "-"],
-                         capture_output=True, text=True).stderr.strip()
-    return {"file": str(mp4), "width": s.get("width"), "height": s.get("height"),
-            "fps": s.get("r_frame_rate"), "frames": s.get("nb_read_frames"),
-            "duration": d.get("format", {}).get("duration"), "decode_ok": not err, "decode_errors": err[:400]}
+    """ffprobe 扁平摘要——委托 videokit 唯一实现（原三处重复已收敛）。"""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+    from videokit import ffprobe_check as _vk_flat  # noqa: E402
+    return _vk_flat(mp4)
 
 
 def audio_align(project_dir: Path) -> list:

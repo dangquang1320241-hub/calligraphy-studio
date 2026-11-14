@@ -84,7 +84,9 @@ def ease_io_cubic(x):
     return 4 * x ** 3 if x < 0.5 else 1 - (-2 * x + 2) ** 3 / 2
 
 
-def ffprobe_report(mp4):
+def probe(mp4, loudness=False, sha=True):
+    """唯一 ffprobe 实现（编排 QC/渲染器 QC 共用）：video/audio/format 三段 + 全片解码核验。
+    loudness（EBU R128）与 sha256 可选——都要完整解码，按需开关。"""
     def run(args):
         return subprocess.run(args, capture_output=True, text=True).stdout.strip()
     v = run(['ffprobe', '-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries',
@@ -93,21 +95,40 @@ def ffprobe_report(mp4):
              'stream=codec_name,sample_rate,channels,duration', '-of', 'json', mp4])
     d = run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration,size,bit_rate', '-of', 'json', mp4])
     dec = subprocess.run(['ffmpeg', '-v', 'error', '-i', mp4, '-f', 'null', '-'], capture_output=True, text=True)
-    lufs = subprocess.run(['ffmpeg', '-hide_banner', '-i', mp4, '-af', 'ebur128=peak=true', '-f', 'null', '-'],
-                          capture_output=True, text=True).stderr
-    summ = {}
-    tail = lufs[lufs.rfind('Summary:'):]
-    for line in tail.splitlines():
-        line = line.strip()
-        if line.startswith('I:'):
-            summ['integrated_lufs'] = float(line.split()[1])
-        if line.startswith('Peak:'):
-            summ['true_peak_dbfs'] = float(line.split()[1])
     rep = {'video': (json.loads(v).get('streams') or [{}])[0],
            'audio': (json.loads(a).get('streams') or [{}])[0],  # 无音轨 mp4 不再 IndexError
            'format': json.loads(d).get('format', {}), 'decode_ok': dec.returncode == 0 and not dec.stderr.strip(),
-           'loudness': summ, 'sha256': sha256(mp4)}
+           'decode_errors': dec.stderr.strip()[:400]}
+    if loudness:
+        lufs = subprocess.run(['ffmpeg', '-hide_banner', '-i', mp4, '-af', 'ebur128=peak=true', '-f', 'null', '-'],
+                              capture_output=True, text=True).stderr
+        summ = {}
+        tail = lufs[lufs.rfind('Summary:'):]
+        for line in tail.splitlines():
+            line = line.strip()
+            if line.startswith('I:'):
+                summ['integrated_lufs'] = float(line.split()[1])
+            if line.startswith('Peak:'):
+                summ['true_peak_dbfs'] = float(line.split()[1])
+        rep['loudness'] = summ
+    if sha:
+        rep['sha256'] = sha256(mp4)
     return rep
+
+
+def ffprobe_report(mp4):
+    """渲染器 QC 全量报告（含响度与 sha256）。"""
+    return probe(mp4, loudness=True, sha=True)
+
+
+def ffprobe_check(mp4):
+    """扁平形状（编排 QC/测试断言用）。"""
+    r = probe(mp4, loudness=False, sha=False)
+    s = r['video']
+    return {'file': str(mp4), 'width': s.get('width'), 'height': s.get('height'),
+            'fps': s.get('r_frame_rate'), 'frames': s.get('nb_read_frames'),
+            'duration': r['format'].get('duration'), 'decode_ok': r['decode_ok'],
+            'decode_errors': r.get('decode_errors', '')}
 
 
 def grab_frames(mp4, times, outdir):
@@ -123,15 +144,17 @@ def grab_frames(mp4, times, outdir):
     return paths
 
 
-def contact_sheet(frame_paths, labels, out, cols=4, thumb_w=360, safe=(0.80, 0.85)):
-    """联系表：每张缩略图叠加平台 UI 安全线（红：底部 y=80%，右侧 x=85%）。"""
+def contact_sheet(frame_paths, labels, out, cols=4, thumb_w=360, safe=(0.80, 0.85), font_path=None):
+    """联系表（唯一实现）：labels 缺省用文件名；safe=None 关闭平台安全线。"""
     ims = [Image.open(p).convert('RGB') for p in frame_paths]
+    if labels is None:
+        labels = [Path(p).stem for p in frame_paths]
     W, H = ims[0].size
     th = int(thumb_w * H / W)
     rows = math.ceil(len(ims) / cols)
     lab_h = 44
     sheet = Image.new('RGB', (cols * (thumb_w + 16) + 16, rows * (th + lab_h + 16) + 16), (40, 40, 40))
-    f = font(None, 26)
+    f = font(font_path, 26)
     d = ImageDraw.Draw(sheet)
     for i, (im, lab) in enumerate(zip(ims, labels)):
         r, c = divmod(i, cols)
@@ -139,11 +162,12 @@ def contact_sheet(frame_paths, labels, out, cols=4, thumb_w=360, safe=(0.80, 0.8
         y = 16 + r * (th + lab_h + 16)
         t = im.resize((thumb_w, th), Image.LANCZOS)
         td = ImageDraw.Draw(t)
-        yy = int(th * safe[0]); xx = int(thumb_w * safe[1])
-        for k in range(0, thumb_w, 12):
-            td.line([(k, yy), (k + 6, yy)], fill=(255, 60, 60), width=2)
-        for k in range(0, th, 12):
-            td.line([(xx, k), (xx, k + 6)], fill=(255, 60, 60), width=2)
+        if safe:  # 平台 UI 安全线（红：底部 safe[0]，右侧 safe[1]）
+            yy = int(th * safe[0]); xx = int(thumb_w * safe[1])
+            for k in range(0, thumb_w, 12):
+                td.line([(k, yy), (k + 6, yy)], fill=(255, 60, 60), width=2)
+            for k in range(0, th, 12):
+                td.line([(xx, k), (xx, k + 6)], fill=(255, 60, 60), width=2)
         sheet.paste(t, (x, y))
         d.text((x, y + th + 6), lab, fill=(235, 235, 235), font=f)
     sheet.save(out, quality=90)
