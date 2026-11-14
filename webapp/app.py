@@ -13,7 +13,7 @@ import urllib.parse
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 REPO = Path(__file__).resolve().parent.parent
@@ -32,6 +32,68 @@ if not VENV_PY.exists():  # 允许系统 python 运行 webapp、venv 只跑渲�
 app = FastAPI(title="calligraphy-studio")
 app.mount("/static", StaticFiles(directory=REPO / "webapp" / "static"), name="static")
 app.mount("/data", StaticFiles(directory=str(DATA)), name="data")
+
+# ── 访问码登录（--auth 启用；家人局域网防误用，也是 README 威胁模型要求的对外前置）──
+AUTH_CODE = None  # None = 不启用（测试/本机模式）
+
+
+def enable_auth(code: str):
+    global AUTH_CODE
+    AUTH_CODE = code
+
+
+@app.middleware("http")
+async def _auth_gate(request, call_next):
+    if AUTH_CODE is None:
+        return await call_next(request)
+    path = request.url.path
+    if path in ("/login", "/logout"):
+        return await call_next(request)
+    if request.cookies.get("cs_auth") == AUTH_CODE:
+        return await call_next(request)
+    return RedirectResponse("/login")
+
+
+_LOGIN_PAGE = """<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>calligraphy-studio · 登录</title>
+<style>
+  body {{ margin:0; background:#171412; color:#efe6d2; font:15px/1.6 "PingFang SC","Microsoft YaHei",sans-serif;
+         display:flex; align-items:center; justify-content:center; min-height:100vh; }}
+  .card {{ background:#221d19; border:1px solid #3a322b; border-radius:12px; padding:36px 40px; width:320px; }}
+  h1 {{ font-size:16px; color:#b8a98f; font-weight:500; margin:0 0 18px; letter-spacing:1px; }}
+  input {{ width:100%; background:#191512; border:1px solid #3a322b; color:#efe6d2; padding:10px 12px;
+          border-radius:8px; font:inherit; margin-bottom:14px; }}
+  button {{ width:100%; background:#b03a2e; border:none; color:#fff; padding:10px; border-radius:8px;
+           font:15px inherit; cursor:pointer; }}
+  .err {{ color:#e0b47f; font-size:13px; margin:0 0 10px; }}
+</style></head><body>
+<div class="card"><h1>calligraphy-studio 工作台</h1>
+{error}<form method="post" action="/login">
+<input type="password" name="password" placeholder="访问码" autofocus>
+<button>进入</button></form></div></body></html>"""
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_form(error: str = ""):
+    return _LOGIN_PAGE.format(error=f'<p class="err">{error}</p>' if error else "")
+
+
+@app.post("/login")
+def login_post(password: str = Form("")):
+    if AUTH_CODE is not None and password != AUTH_CODE:
+        return HTMLResponse(_LOGIN_PAGE.format(error='<p class="err">访问码不正确</p>'), status_code=401)
+    resp = RedirectResponse("/", status_code=303)
+    resp.set_cookie("cs_auth", AUTH_CODE or "", httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    return resp
+
+
+@app.get("/logout")
+def logout():
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie("cs_auth")
+    return resp
 
 
 def prof_dir(slug: str) -> Path:
@@ -327,11 +389,24 @@ def api_library():
 
 def main():
     import argparse
+    import secrets
     import uvicorn
     ap = argparse.ArgumentParser(description="calligraphy-studio Web 界面")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8800)
+    ap.add_argument("--auth", action="store_true",
+                    help="启用访问码登录（码持久化在 ~/.calligraphy-studio/webauth.json）")
     a = ap.parse_args()
+    if a.auth:
+        code_file = Path.home() / ".calligraphy-studio" / "webauth.json"
+        code_file.parent.mkdir(parents=True, exist_ok=True)
+        if code_file.exists():
+            code = json.loads(code_file.read_text(encoding="utf-8"))["code"]
+        else:
+            code = secrets.token_hex(3)  # 6 位，好输
+            code_file.write_text(json.dumps({"code": code}), encoding="utf-8")
+        enable_auth(code)
+        print("访问码：", code)
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
 
 
