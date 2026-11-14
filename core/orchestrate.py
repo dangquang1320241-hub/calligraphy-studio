@@ -11,6 +11,7 @@ import csv
 import hashlib
 import importlib
 import json
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -75,7 +76,9 @@ def build_render_cmd(plugin, report: dict, project_dir: Path, preview, skip_tts)
         # 部分渲染器（章法解析/节奏卡点/临帖对比/书写路径）未声明 --skip-tts，传了会 argparse 崩溃
         cmd.append("--skip-tts")
     if preview:
-        cmd += ["--preview", str(preview)]
+        # 整数秒传整数字面量：B 族有 type=int 的 --preview（笔顺复现），"10.0" 会 argparse 崩溃
+        pv = float(preview)
+        cmd += ["--preview", str(int(pv)) if pv.is_integer() else str(pv)]
     return cmd
 
 
@@ -164,6 +167,51 @@ def cmd_make(args):
     print("  3) 成片联系表：", project_dir / "检查记录")
 
 
+def cmd_sample(args):
+    """风格样片：用样片源作品试渲前 N 秒 → 样片库/<风格>.mp4（+首帧缩略图）。
+
+    与 make 的区别：不进 项目/、不记账发布索引；TTS 能跳则跳（样片看视觉风格）。
+    """
+    styles = discover_styles()
+    if args.style not in styles:
+        raise SystemExit(f"未知风格：{args.style}（可用：{'、'.join(styles)}）")
+    plugin = styles[args.style]
+    data_root = Path(args.data_root)
+    prof = load_profile(args.slug, data_root)
+    prof["_dir"] = data_root / "作品档案" / args.slug
+    if plugin.NEEDS_TEXT and not prof["transcription"].get("text"):
+        raise SystemExit(f"样片源档案「{args.slug}」缺释文：请先在 ③ 补齐，或换一件已确认的作品（--slug）")
+
+    sample_dir = data_root / "样片库"
+    project_dir = sample_dir / "_build" / args.style  # 与 项目/ 完全隔离
+    report = plugin.build_config(prof, project_dir, {"title": f"风格样片 · {args.style}"})
+    print(f"config 生成：{report['config']}")
+
+    cmd = build_render_cmd(plugin, report, project_dir, preview=args.seconds, skip_tts=True)
+    print("样片渲染：", " ".join(cmd))
+    subprocess.run(cmd, check=True)
+    mp4 = newest_mp4(project_dir)
+    if not mp4:
+        raise SystemExit("渲染未产出成片")
+    out = sample_dir / f"{args.style}.mp4"
+    shutil.copy(mp4, out)
+    print("样片 →", out)
+
+    try:  # 首帧缩略图（可选项，失败不阻断样片本身）
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+        from PIL import Image
+
+        from videokit import grab_frames
+        frames = grab_frames(str(out), [0.2], sample_dir)
+        if frames:
+            Image.open(frames[0]).convert("RGB").save(sample_dir / f"{args.style}.jpg", quality=85)
+            Path(frames[0]).unlink(missing_ok=True)
+            print("缩略图 →", sample_dir / f"{args.style}.jpg")
+    except Exception as e:  # noqa: BLE001 - 缩略图尽力而为
+        print("缩略图跳过：", e)
+
+
 def cmd_llm(args):
     """LLM 草稿三件套：释文草稿 / 多音字预标注 / 文案草稿。输出一律 draft，待人工确认。"""
     from core import llm
@@ -222,11 +270,18 @@ def main():
     l.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     l.add_argument("--export", action="store_true", help="transcribe：导出逐列裁图+prompt（无 API key 模式）")
     l.add_argument("--import-reply", dest="import_reply", help="transcribe：导入外部 LLM 回复文件")
+    s = sub.add_parser("sample", help="生成风格样片（试渲前 N 秒 → 样片库/<风格>.mp4 + 首帧缩略图）")
+    s.add_argument("style")
+    s.add_argument("--slug", required=True, help="样片源作品档案（建议用人审过的档案）")
+    s.add_argument("--seconds", type=float, default=10.0, help="样片时长（前 N 秒试渲）")
+    s.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     a = ap.parse_args()
     if a.cmd == "make":
         cmd_make(a)
     elif a.cmd == "llm":
         cmd_llm(a)
+    elif a.cmd == "sample":
+        cmd_sample(a)
 
 
 if __name__ == "__main__":

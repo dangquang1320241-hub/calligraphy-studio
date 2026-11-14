@@ -161,6 +161,15 @@ def test_web_upload_validation(synthetic_source):
     assert r.status_code == 415
 
 
+def test_web_sample_endpoints(synthetic_source):
+    # 样片：注册表带 sample 状态；未知风格 404（真实生成走后台任务，不在此测）
+    _seed(synthetic_source)
+    styles = client.get("/api/styles").json()
+    assert styles["朗读版"]["sample"] is False  # 测试临时数据根无样片库
+    r = client.post("/api/sample/不存在的风格")
+    assert r.status_code == 404
+
+
 def test_grab_frames_out_of_range(tmp_path):
     # 回归：-ss 越过视频末尾时 ffmpeg 0 退出且不出文件，曾把不存在路径传给下游
     from common.videokit import grab_frames

@@ -98,8 +98,25 @@ def _style_registry() -> dict:
     from core.orchestrate import discover_styles
     out = {}
     for name, mod in discover_styles().items():
-        out[name] = {"needs_text": bool(mod.NEEDS_TEXT), "granularity": getattr(mod, "GRANULARITY", "")}
+        out[name] = {"needs_text": bool(mod.NEEDS_TEXT), "granularity": getattr(mod, "GRANULARITY", ""),
+                     "sample": bool((DATA / "样片库" / f"{name}.mp4").exists())}
     return out
+
+
+def _sample_slug() -> str:
+    """样片源作品：优先人审过的档案（human-confirmed），否则取最新有释文的。"""
+    best = ""
+    for d in sorted((DATA / "作品档案").glob("*/档案.json"), key=lambda p: -p.stat().st_mtime):
+        try:
+            prof = json.loads(d.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not prof.get("transcription", {}).get("text"):
+            continue
+        if prof["transcription"].get("confidence") == "human-confirmed":
+            return prof["slug"]
+        best = best or prof["slug"]
+    return best
 
 
 # ─────────────────────────────── 页面
@@ -238,6 +255,22 @@ def api_confirm(slug: str, body: dict):
 @app.get("/api/styles")
 def api_styles():
     return _style_registry()
+
+
+@app.post("/api/sample/{style}")
+def api_sample(style: str):
+    """生成风格样片（样片源自动选人审过的档案）；已有样片时前端直接播放，不会走到这里。"""
+    from core.orchestrate import discover_styles
+    if style not in discover_styles():
+        raise HTTPException(404, f"未知风格：{style}")
+    slug = _sample_slug()
+    if not slug:
+        raise HTTPException(400, "作品库为空：请先上传一件作品（样片用它试渲）")
+    _assert_slug_free(slug)
+    cmd = [str(VENV_PY), "-m", "core.orchestrate", "sample", style,
+           "--slug", slug, "--data-root", str(DATA)]
+    jid = jobs.start(f"生成样片 {style}", cmd, slug=slug)
+    return {"job": jid, "slug": slug}
 
 
 @app.post("/api/make")
