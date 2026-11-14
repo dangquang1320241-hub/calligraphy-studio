@@ -57,6 +57,29 @@ def test_annotate_pronunciation():
     assert "甲" not in flags                        # 常见字不误标（pypinyin 冷僻异读可容忍）
 
 
+def test_provider_auto_select(monkeypatch):
+    # 未显式指定：deepseek 优先，glm 兜底，全无 key 报可操作的错误
+    from core import llm
+    for k in ("CALLIGRAPHY_LLM", "DEEPSEEK_API_KEY", "ZAI_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
+        llm.get_provider()
+    monkeypatch.setenv("ZAI_API_KEY", "k")
+    assert llm.get_provider().name == "glm"
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    assert llm.get_provider().name == "deepseek"   # deepseek 优先
+
+
+def test_deepseek_provider(monkeypatch):
+    from core.llm import DeepSeekProvider
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
+        DeepSeekProvider()
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    p = DeepSeekProvider()
+    assert p.model == "deepseek-flash" and p.base == "https://api.deepseek.com"
+
+
 def test_import_draft(profile_factory):
     root = profile_factory(slug="草稿案例")
     prof_dir = root / "作品档案" / "草稿案例"

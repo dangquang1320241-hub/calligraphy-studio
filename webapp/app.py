@@ -187,9 +187,10 @@ def home():
     return (REPO / "webapp" / "static" / "index.html").read_text(encoding="utf-8")
 
 
-# ─────────────────────────────── ① 上传构建
+# ─────────────────────────────── ① 上传构建 / ⚡ 一键出片
 @app.post("/api/profiles")
-async def api_create(slug: str = Form(...), text: str = Form(""), image: UploadFile = File(...)):
+async def api_create(slug: str = Form(...), text: str = Form(""), image: UploadFile = File(...),
+                     auto: str = Form("0"), style: str = Form("")):
     slug = _safe(slug)
     if not slug:
         raise HTTPException(400, "作品标识不能为空")
@@ -210,8 +211,18 @@ async def api_create(slug: str = Form(...), text: str = Form(""), image: UploadF
         t = up / f"{slug}_释文.txt"
         t.write_text(text.strip() + "\n", encoding="utf-8")
         cmd += ["--text", str(t)]
-    jid = jobs.start(f"构建档案 {slug}", cmd, slug=slug)
-    return {"job": jid, "slug": slug}
+    label = f"构建档案 {slug}"
+    if auto == "1":
+        from core.orchestrate import discover_styles
+        if style not in discover_styles():
+            raise HTTPException(400, f"未知风格：{style}")
+        cmd = [str(VENV_PY), "-m", "core.orchestrate", "auto", str(src),
+               "--style", style, "--slug", slug, "--data-root", str(DATA)]
+        if text.strip():
+            cmd += ["--text", str(t)]
+        label = f"一键出片 {slug} · {style}"
+    jid = jobs.start(label, cmd, slug=slug)
+    return {"job": jid, "slug": slug, "auto": auto == "1"}
 
 
 # ─────────────────────────────── ② 列框确认

@@ -71,9 +71,17 @@
       </div>
     </div>
     <label>释文（可先留空，之后在③逐列确认；含标点，从右到左的阅读顺序）</label>
-    <textarea id="newText" placeholder="例：槐阴满庭。吾侪小人，朝不及夕，……"></textarea>
+    <textarea id="newText" placeholder="例：槐阴满庭。吾侪小人，朝不及夕，……（一键模式下：填了直接出片，没填由 AI 认字）"></textarea>
+    <label class="row" style="align-items:center"><input type="checkbox" id="aAuto" style="width:auto" onchange="toggleAuto()"> ⚡ 一键出片（跳过②③确认，直接出视频）</label>
+    <div id="autoRow" class="row hide">
+      <div>
+        <label>出片风格</label>
+        <select id="aStyle" style="padding:8px;border-radius:8px;border:1px solid var(--line);background:#191512;color:var(--ink)"></select>
+      </div>
+      <div style="align-self:end"><span class="muted" style="font-size:12px">没填释文时由 AI 认字（可③修正后重出）</span></div>
+    </div>
     <p class="step-note">构建内容：EXIF 归正 → 几何摆正 → 自动列/字检测 → 列框确认图。约 10–30 秒。</p>
-    <button class="go" onclick="createProfile()">构建档案</button>
+    <button class="go" onclick="createProfile()" id="goBtn">构建档案</button>
     <pre id="job1" class="log hide"></pre>
   </div>
   <div class="card">
@@ -194,11 +202,33 @@ function pollJob(id, pre, cb) {
 async function createProfile() {
   const slug = $('#newSlug').value.trim();
   if (!slug || !$('#newImage').files[0]) return alert('请填作品标识并选择照片');
+  const auto = $('#aAuto').checked;
+  if (auto && !$('#aStyle').value) return alert('请选择出片风格');
   const fd = new FormData();
   fd.append('slug', slug); fd.append('text', $('#newText').value); fd.append('image', $('#newImage').files[0]);
+  if (auto) { fd.append('auto', '1'); fd.append('style', $('#aStyle').value); }
   const {job} = await api('/api/profiles', {method:'POST', body:fd});
   SLUG = slug; badge(slug);
-  pollJob(job, '#job1', j => { if (j.status === 'done') { goto(2); loadLib(); } });
+  pollJob(job, '#job1', j => { if (j.status === 'done') { goto(auto ? 4 : 2); loadLib(); } });
+}
+async function toggleAuto() {
+  const row = $('#autoRow');
+  if ($('#aAuto').checked) {
+    row.classList.remove('hide');
+    $('#goBtn').textContent = '⚡ 一键出片';
+    if (!$('#aStyle').options.length) {
+      const styles = await api('/api/styles');
+      const sel = $('#aStyle');
+      Object.entries(styles).forEach(([name, meta]) => {
+        const o = document.createElement('option');
+        o.value = o.textContent = name;
+        sel.appendChild(o);
+      });
+    }
+  } else {
+    row.classList.add('hide');
+    $('#goBtn').textContent = '构建档案';
+  }
 }
 async function loadLib() {
   const items = await api('/api/library');

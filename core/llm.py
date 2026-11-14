@@ -2,12 +2,16 @@
 """LLM 接入（M1.5，契约见 docs/架构.md §7.5）。
 
 三个草稿生成器：释文草稿 / 多音字预标注 / 文案草稿。
-红线：LLM 输出一律标 draft（confidence='llm-draft'），人工确认（确认点 2）前不进入渲染。
+红线：LLM 输出一律标 draft（confidence='llm-draft'）；一键模式直出的档案标 llm-auto，
+可在 ③ 修正后重出（见 orchestrate auto）。
 
-Provider：
-  - GLMProvider：OpenAI 兼容接口，环境变量 ZAI_API_KEY（可选 ZAI_BASE_URL、ZAI_MODEL，默认 glm-4.6v 视觉）
-  - 无 key 时走"导出/导入"模式：把逐列裁图 + prompt 导出到 档案目录/llm包/，
-    人工粘贴给任意大模型，回复存成 释文草稿回复.txt 后 --import 收回。
+Provider（OpenAI 兼容 chat/completions，视觉走 image_url data URI）：
+  - DeepSeekProvider：DEEPSEEK_API_KEY（可选 DEEPSEEK_BASE_URL、DEEPSEEK_MODEL，默认 deepseek-flash，
+    V4.1 起原生多模态，视觉认字 + 文案全能）
+  - GLMProvider：ZAI_API_KEY（可选 ZAI_BASE_URL、ZAI_MODEL，默认 glm-4.6v 视觉），备选
+  - 未显式指定时按可用 key 自动选（deepseek 优先）；无 key 走"导出/导入"模式：
+    把逐列裁图 + prompt 导出到 档案目录/llm包/，人工粘贴给任意大模型，回复存成
+    释文草稿回复.txt 后 --import 收回。
 """
 import base64
 import json
@@ -18,7 +22,6 @@ from pathlib import Path
 from PIL import Image
 
 REPO = Path(__file__).resolve().parent.parent
-sys_path_placeholder = None
 
 
 class LLMProvider:
@@ -28,15 +31,20 @@ class LLMProvider:
         raise NotImplementedError
 
 
-class GLMProvider(LLMProvider):
-    name = "glm"
+class OpenAICompatProvider(LLMProvider):
+    """OpenAI 兼容 chat/completions 基类；子类只声明环境变量与默认值。"""
+    key_env = ""
+    base_env = ""
+    base_default = ""
+    model_env = ""
+    model_default = ""
 
     def __init__(self, model: str | None = None):
-        self.key = os.environ.get("ZAI_API_KEY", "")
-        self.base = os.environ.get("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4")
-        self.model = model or os.environ.get("ZAI_MODEL", "glm-4.6v")
+        self.key = os.environ.get(self.key_env, "")
+        self.base = os.environ.get(self.base_env, self.base_default)
+        self.model = model or os.environ.get(self.model_env, self.model_default)
         if not self.key:
-            raise RuntimeError("未设置 ZAI_API_KEY；或改用导出/导入模式：llm-transcribe --export")
+            raise RuntimeError(f"未设置 {self.key_env}；或改用导出/导入模式：llm transcribe --export")
 
     def chat(self, prompt, images=None):
         content = [{"type": "text", "text": prompt}]
@@ -53,10 +61,41 @@ class GLMProvider(LLMProvider):
             return json.loads(r.read())["choices"][0]["message"]["content"]
 
 
+class DeepSeekProvider(OpenAICompatProvider):
+    """DeepSeek V4.1-Flash（deepseek-flash）：原生多模态，认字 + 文案。"""
+    name = "deepseek"
+    key_env = "DEEPSEEK_API_KEY"
+    base_env = "DEEPSEEK_BASE_URL"
+    base_default = "https://api.deepseek.com"
+    model_env = "DEEPSEEK_MODEL"
+    model_default = "deepseek-flash"
+
+
+class GLMProvider(OpenAICompatProvider):
+    """智谱 GLM-4.6V 视觉，备选 provider。"""
+    name = "glm"
+    key_env = "ZAI_API_KEY"
+    base_env = "ZAI_BASE_URL"
+    base_default = "https://api.z.ai/api/paas/v4"
+    model_env = "ZAI_MODEL"
+    model_default = "glm-4.6v"
+
+
 def get_provider(name: str | None = None) -> LLMProvider:
-    name = name or os.environ.get("CALLIGRAPHY_LLM", "glm")
+    """显式指定 > CALLIGRAPHY_LLM > 按可用 key 自动选（deepseek 优先）。"""
+    name = name or os.environ.get("CALLIGRAPHY_LLM")
+    if not name:
+        if os.environ.get("DEEPSEEK_API_KEY"):
+            name = "deepseek"
+        elif os.environ.get("ZAI_API_KEY"):
+            name = "glm"
+        else:
+            raise RuntimeError("未配置 LLM：请设 DEEPSEEK_API_KEY（推荐，视觉+文本）或 ZAI_API_KEY；"
+                               "或用 CALLIGRAPHY_LLM 显式指定 glm/deepseek")
     if name == "glm":
         return GLMProvider()
+    if name == "deepseek":
+        return DeepSeekProvider()
     raise ValueError(f"未知 LLM provider：{name}")
 
 

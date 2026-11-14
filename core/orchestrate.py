@@ -19,7 +19,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
-from core.profile import DEFAULT_DATA_ROOT, build_profile, load_profile  # noqa: E402
+from core.profile import DEFAULT_DATA_ROOT, build_profile, load_profile, strip_punct  # noqa: E402
 
 
 def sha256(p: Path) -> str:
@@ -212,6 +212,64 @@ def cmd_sample(args):
         print("缩略图跳过：", e)
 
 
+def cmd_auto(args):
+    """一键出片：图（+可选释文）→ 建档案 → 直接渲染（QC/索引与 make 完全一致）。
+
+    释文策略（①A 决策）：填了零 LLM 直出；没填走视觉认字，档案标 llm-auto，
+    低置信字超阈值退回 ②③ 确认流程——认字结果可随时在 ③ 修正后重出（档案复用，重出=一次渲染）。
+    """
+    styles = discover_styles()
+    if args.style not in styles:
+        raise SystemExit(f"未知风格：{args.style}（可用：{'、'.join(styles)}）")
+    plugin = styles[args.style]
+    source, data_root = Path(args.source), Path(args.data_root)
+    slug_dir = data_root / "作品档案" / args.slug
+
+    if args.text:
+        text = Path(args.text).read_text(encoding="utf-8").strip()
+        build_profile(source, text, args.slug, data_root)
+        print(f"释文：您已提供（{len(strip_punct(text))} 字，不含标点）——零 LLM 调用")
+    elif not plugin.NEEDS_TEXT:
+        build_profile(source, None, args.slug, data_root)
+        print("释文：该风格无需释文——零 LLM 调用")
+    else:
+        from core import llm
+        build_profile(source, None, args.slug, data_root)
+        prov = llm.get_provider()
+        print(f"释文：未提供 → {prov.name} 视觉认字（{prov.model}）…")
+        try:
+            draft = llm.draft_transcription(slug_dir, provider=prov)
+        except Exception as e:  # noqa: BLE001 - 网络/解析错误统一退回确认流程
+            raise SystemExit(f"LLM 认字失败（{e}）；档案已建，可走 ②③ 确认流程或稍后重试")
+        low = draft.get("low_confidence_chars", [])
+        if len(low) > args.max_low_conf:
+            raise SystemExit(f"低置信字 {len(low)} 个（{'、'.join(low[:8])}）超过阈值 {args.max_low_conf}，"
+                             "已退回确认流程：请在 ② 查列框、③ 确认释文后再出片")
+        try:
+            build_profile(source, None, args.slug, data_root, per_column=draft["per_column"])
+        except ValueError as e:
+            raise SystemExit(f"LLM 逐列释文与画面检出不一致（{str(e).splitlines()[0]}）；"
+                             "档案已建，请走 ②③ 确认流程")
+        # 红线标注：LLM 直出 ≠ 人审——③ 修正确认后即转 human-confirmed
+        pj = slug_dir / "档案.json"
+        prof = json.loads(pj.read_text(encoding="utf-8"))
+        prof["transcription"]["confidence"] = "llm-auto"
+        prof["transcription"]["draft"] = {"provider": prov.name, "model": prov.model,
+                                          "low_confidence_chars": low,
+                                          "source_text": draft.get("source_text")}
+        prof["pronunciation"] = llm.annotate_pronunciation(prof["transcription"].get("text", ""))
+        pj.write_text(json.dumps(prof, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"释文：{prov.name} 认字{'（低置信：' + '、'.join(low) + '）' if low else ''}"
+              "——可随时在 ③ 修正后重出")
+
+    make_args = argparse.Namespace(
+        style=args.style, source=str(source), text=None, slug=args.slug,
+        data_root=str(data_root), title=args.title, author=args.author,
+        title_sub=args.title_sub, params=None, preview=args.preview,
+        skip_tts=False, rebuild_profile=False, col_counts=None)
+    cmd_make(make_args)
+
+
 def cmd_llm(args):
     """LLM 草稿三件套：释文草稿 / 多音字预标注 / 文案草稿。输出一律 draft，待人工确认。"""
     from core import llm
@@ -275,6 +333,18 @@ def main():
     s.add_argument("--slug", required=True, help="样片源作品档案（建议用人审过的档案）")
     s.add_argument("--seconds", type=float, default=10.0, help="样片时长（前 N 秒试渲）")
     s.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
+    au = sub.add_parser("auto", help="一键出片：图（+可选释文）→ 建档案（LLM 认字兜底）→ 直接渲染")
+    au.add_argument("source")
+    au.add_argument("--style", required=True)
+    au.add_argument("--slug", required=True)
+    au.add_argument("--text", help="释文 txt（可选；填了零 LLM 调用）")
+    au.add_argument("--title", help="片头标题")
+    au.add_argument("--author", help="署名")
+    au.add_argument("--title-sub", dest="title_sub", help="副标题")
+    au.add_argument("--max-low-conf", dest="max_low_conf", type=int, default=3,
+                    help="低置信字超过该数量则退回 ②③ 确认流程（默认 3）")
+    au.add_argument("--preview", type=float, help="只渲前 N 秒")
+    au.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
     a = ap.parse_args()
     if a.cmd == "make":
         cmd_make(a)
@@ -282,6 +352,8 @@ def main():
         cmd_llm(a)
     elif a.cmd == "sample":
         cmd_sample(a)
+    elif a.cmd == "auto":
+        cmd_auto(a)
 
 
 if __name__ == "__main__":

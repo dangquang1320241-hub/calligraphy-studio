@@ -1,5 +1,6 @@
 """orchestrate 编排分段测试：失败路径与幂等索引（不真实渲染）。"""
 import csv
+import json
 import shutil
 import subprocess
 from argparse import Namespace
@@ -101,3 +102,97 @@ def test_cmd_sample_needs_text_guard(tmp_path, synthetic_source):
     a = Namespace(style="朗读版", slug="无释文作品", seconds=10.0, data_root=str(tmp_path / "data"))
     with pytest.raises(SystemExit, match="缺释文"):
         cmd_sample(a)
+
+
+def _auto_args(tmp_path, **kw):
+    base = dict(source=str(tmp_path / "src.jpg"), style="朗读版", slug="测速作品", text=None,
+                title=None, author=None, title_sub=None, max_low_conf=3, preview=None,
+                data_root=str(tmp_path / "data"))
+    base.update(kw)
+    return Namespace(**base)
+
+
+def _patch_render(monkeypatch):
+    """渲染步替换：产出真实 1s 小片（QC 的 ffprobe 需要真文件）；其余 subprocess 走原实现。
+
+    注意 monkeypatch 打在 subprocess 模块属性上是全局生效，必须按命令分派。
+    """
+    orig = subprocess.run
+
+    def smart(cmd, **kw):
+        if "--config" in cmd:
+            cfg = Path(cmd[cmd.index("--config") + 1])
+            proj = cfg.parent.parent
+            (proj / "成片").mkdir(parents=True, exist_ok=True)
+            out = proj / "成片" / "out.mp4"
+            orig(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=64x64:d=1",
+                  "-t", "1", str(out)], check=True, capture_output=True)
+            return 0
+        return orig(cmd, **kw)
+
+    monkeypatch.setattr("core.orchestrate.subprocess.run", smart)
+
+
+def test_auto_with_text_skips_llm(tmp_path, monkeypatch, synthetic_source):
+    # ①A：填了释文 → 零 LLM 调用直出（无任何 LLM key 也不受影响）
+    from core.orchestrate import cmd_auto
+    src = tmp_path / "src.jpg"
+    shutil.copy(synthetic_source, src)
+    (tmp_path / "释文.txt").write_text("甲乙丙，丁戊己。庚辛壬；癸子丑", encoding="utf-8")
+    _patch_render(monkeypatch)
+    cmd_auto(_auto_args(tmp_path, source=str(src), text=str(tmp_path / "释文.txt")))
+    prof = json.loads((tmp_path / "data" / "作品档案" / "测速作品" / "档案.json").read_text(encoding="utf-8"))
+    assert prof["transcription"]["confidence"] == "human-provided"
+    assert (tmp_path / "data" / "发布索引.csv").exists()
+
+
+def test_auto_llm_fallback(tmp_path, monkeypatch, synthetic_source):
+    # 没填释文 → 视觉认字直出，档案标 llm-auto 并记录来源；③ 修正后可重出
+    import json as _json
+
+    from core.orchestrate import cmd_auto
+    from core.profile import build_profile
+    src = tmp_path / "src.jpg"
+    shutil.copy(synthetic_source, src)
+    build_profile(src, None, "占位", tmp_path / "data")  # 预热导入路径无副作用
+
+    class FakeProv:
+        name, model = "deepseek", "deepseek-flash"
+
+        def chat(self, prompt, images=None):
+            return _json.dumps({"来源": "测试篇", "columns": ["甲乙丙", "丁戊己", "庚辛壬", "癸子丑"],
+                                "置信度低的字": ["乙"]})
+
+    monkeypatch.setattr("core.llm.get_provider", lambda name=None: FakeProv())
+    _patch_render(monkeypatch)
+    cmd_auto(_auto_args(tmp_path, source=str(src)))
+    prof = json.loads((tmp_path / "data" / "作品档案" / "测速作品" / "档案.json").read_text(encoding="utf-8"))
+    assert prof["transcription"]["confidence"] == "llm-auto"
+    assert prof["transcription"]["draft"]["provider"] == "deepseek"
+    assert prof["transcription"]["per_column"] == ["甲乙丙", "丁戊己", "庚辛壬", "癸子丑"]
+    assert "pronunciation" in prof
+    assert (tmp_path / "data" / "发布索引.csv").exists()
+
+
+def test_auto_low_conf_gate(tmp_path, monkeypatch, synthetic_source):
+    # 低置信字超过阈值 → 退回 ②③ 确认流程，不进入渲染
+    import json as _json
+
+    from core.orchestrate import cmd_auto
+    from core.profile import build_profile
+    src = tmp_path / "src.jpg"
+    shutil.copy(synthetic_source, src)
+    build_profile(src, None, "占位", tmp_path / "data")
+
+    class FakeProv:
+        name, model = "deepseek", "deepseek-flash"
+
+        def chat(self, prompt, images=None):
+            return _json.dumps({"来源": None, "columns": ["甲乙丙", "丁戊己", "庚辛壬", "癸子丑"],
+                                "置信度低的字": ["甲", "乙", "丙", "丁"]})
+
+    monkeypatch.setattr("core.llm.get_provider", lambda name=None: FakeProv())
+    _patch_render(monkeypatch)  # 门槛在渲染前触发，补丁仅为防误触真实渲染
+    with pytest.raises(SystemExit, match="退回确认"):
+        cmd_auto(_auto_args(tmp_path, source=str(src)))
+    assert not (tmp_path / "data" / "发布索引.csv").exists()

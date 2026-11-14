@@ -170,6 +170,14 @@ def test_web_sample_endpoints(synthetic_source):
     assert r.status_code == 404
 
 
+def test_web_auto_invalid_style(synthetic_source):
+    # 一键出片：风格校验在上传后、任务启动前拦截
+    _seed(synthetic_source)
+    r = client.post("/api/profiles", data={"slug": "一键测试", "text": "", "auto": "1", "style": "不存在"},
+                    files={"image": ("w.jpg", b"x", "image/jpeg")})
+    assert r.status_code == 400
+
+
 def test_grab_frames_out_of_range(tmp_path):
     # 回归：-ss 越过视频末尾时 ffmpeg 0 退出且不出文件，曾把不存在路径传给下游
     from common.videokit import grab_frames

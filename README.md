@@ -25,6 +25,17 @@ brew install ffmpeg   # 若未装
 - 数据目录默认 `~/Workspace/10-Projects/VideoCreationStorage/CalligraphyWorksShow`，可用 `--data-root` 改。
 - 无释文也可先建档案（版式级风格直出；释文在 Web ③屏补），HEIC（iPhone/微信传图）直接上传即可。
 
+## ⚡ 一键出片（可选）
+
+```bash
+.venv/bin/python -m core.orchestrate auto <作品图.jpg> --style 朗读版 --slug <标识> [--text 释文.txt]
+```
+
+- **填 `--text`**：零 LLM 调用直出（释文以您填的为准——自家人写的作品认得字，这是最准的路）
+- **不填**：AI 视觉认字直出。需设 `DEEPSEEK_API_KEY`（默认模型 `deepseek-flash`，V4.1 起原生视觉）；GLM 备选设 `ZAI_API_KEY`；`CALLIGRAPHY_LLM=glm|deepseek` 显式切换
+- AI 认字的档案标 `llm-auto`，低置信字超过 3 个自动退回 ②③ 确认流程；释文随时可在 Web ③屏修正后**一键重出**（档案复用，重出=一次渲染）
+- 无需释文的版式类风格（墨色呼吸/作品入画等）零 LLM；Web ①屏勾选「⚡ 一键出片」同款能力
+
 ## 结构
 
 见 [docs/架构.md](docs/架构.md)：风格矩阵、作品档案 schema、插件契约、LLM 接入契约、里程碑。
