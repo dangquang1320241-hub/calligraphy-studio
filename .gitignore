@@ -6,3 +6,4 @@ __pycache__/
 *.wav
 .coverage
 htmlcov/
+skill/workbuddy/dist/

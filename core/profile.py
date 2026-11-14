@@ -5,6 +5,7 @@
   python -m core.profile <作品图> --text 释文.txt --slug 三槐堂铭节选 [--data-root …] [--signature]
 """
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +25,9 @@ import geometry as geom  # noqa: E402
 import inkseg  # noqa: E402
 from videokit import sha256  # noqa: E402
 
-DEFAULT_DATA_ROOT = Path("/Users/nolan/Workspace/10-Projects/VideoCreationStorage/CalligraphyWorksShow")
+DEFAULT_DATA_ROOT = Path(os.environ.get(
+    "CALLIGRAPHY_DATA_ROOT",
+    str(Path.home() / "Workspace" / "10-Projects" / "VideoCreationStorage" / "CalligraphyWorksShow")))
 PUNCT = set("，。；：、！？…,.;:!?“”「」《》·— \u3000\n\r\t")
 SCHEMA_VERSION = "0.1.0"
 
