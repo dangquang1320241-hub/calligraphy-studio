@@ -69,3 +69,8 @@ brew install ffmpeg   # 若未装
 RUN_RENDER_TESTS=1 .venv/bin/python -m pytest tests/ -q  # 含渲染集成
 uvx ruff check core common styles webapp tests --select E9,F   # 错误级静态检查
 ```
+
+## 许可
+
+- 代码：[MIT](LICENSE)
+- 字体：霞鹜文楷 LXGW WenKai（[SIL OFL 1.1](common/fonts/OFL.txt)，© LXGW，Klee 衍生）
