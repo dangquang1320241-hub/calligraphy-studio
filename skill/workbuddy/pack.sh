@@ -12,7 +12,7 @@ echo "复制工具库副本（排除 .venv/.git/缓存）…"
 rsync -a \
   --exclude '.venv/' --exclude '.git/' --exclude '__pycache__/' --exclude '.pytest_cache/' \
   --exclude '.coverage' --exclude '.DS_Store' --exclude 'skill/' --exclude 'dist/' \
-  --exclude '样片库/' --exclude '_uploads/' \
+  --exclude '样片库/' --exclude '_uploads/' --exclude '.ruff_cache/' \
   "$REPO/" "$DIST/bundled/calligraphy-studio/"
 
 cp manifest.json prompt.md README.md "$DIST/"

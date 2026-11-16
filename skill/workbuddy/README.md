@@ -4,7 +4,7 @@
 
 ## 安装（WorkBuddy 桌面端）
 
-1. 在工具库跑 `skill/workbuddy/pack.sh` 打出 `calligraphy-studio-skill.zip`（约 25MB，内嵌工具库副本与字体）
+1. 在工具库跑 `skill/workbuddy/pack.sh` 打出 `calligraphy-studio-skill.zip`（约 13.7MB，内嵌工具库副本与字体）
 2. WorkBuddy →「Skills 技能」→「导入」→「本地上传」选 zip，确认名称/触发词
 3. 首次对 agent 说「书法出片自检」或「出片」：agent 会跑 `scripts/bootstrap.sh` 完成安装（一次性，几分钟），随后跑 `check_env.sh` 应输出 `RESULT=ready`
 4. **验证清单**（第一次必做）：

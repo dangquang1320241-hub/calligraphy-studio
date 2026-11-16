@@ -3,10 +3,10 @@
 set -u
 fail=0
 
-NOLAN_DEFAULT="$HOME/Workspace/10-Projects/calligraphy-studio"
+DEV_DEFAULT="$HOME/Workspace/10-Projects/calligraphy-studio"   # 开发机路径，仅作兜底
 TARGET="${CALLIGRAPHY_STUDIO_HOME:-}"
-if [ -z "$TARGET" ] && [ -d "$NOLAN_DEFAULT" ]; then TARGET="$NOLAN_DEFAULT"; fi
-if [ -z "$TARGET" ]; then TARGET="$HOME/calligraphy-studio"; fi
+if [ -z "$TARGET" ] && [ -d "$HOME/calligraphy-studio" ]; then TARGET="$HOME/calligraphy-studio"; fi
+if [ -z "$TARGET" ] && [ -d "$DEV_DEFAULT" ]; then TARGET="$DEV_DEFAULT"; fi
 echo "STUDIO_HOME=$TARGET"
 
 if [ -d "$TARGET" ]; then
